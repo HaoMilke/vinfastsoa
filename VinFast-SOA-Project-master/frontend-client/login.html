@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head><title>Đăng Nhập Hệ Thống</title></head>
+<body>
+    <h1>Đăng Nhập Hệ Thống VinFast</h1>
+    <form id="loginForm">
+        <input type="email" id="email" required placeholder="Email (admin@vinfast.com)">
+        <input type="password" id="password" required placeholder="Mật khẩu (123456)">
+        <button type="submit">Đăng nhập</button>
+        <p id="message"></p>
+    </form>
+    <a href="register.html">Đăng ký tài khoản mới</a>
+
+    <script src="script.js"></script>
+    <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const msg = document.getElementById('message');
+        
+        const response = await fetch(`${BASE_GATEWAY_URL}/users/users/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            
+            // XỬ LÝ TOKEN: Lưu token và ID
+            saveToken(data.token);
+            const userId = getUserIdFromToken(data.token);
+            
+            // Dùng ID để kiểm tra và gắn cho các giao dịch
+            if (userId) localStorage.setItem('user_id', userId); 
+            
+            msg.textContent = '✅ Đăng nhập thành công! Chuyển hướng...';
+            setTimeout(() => {
+                 // Chuyển hướng đến Dashboard Admin hoặc trang đặt hàng
+                window.location.href = 'index.html'; 
+            }, 1000);
+        } else {
+            msg.textContent = '❌ Đăng nhập thất bại. Vui lòng kiểm tra lại.';
+        }
+    });
+    </script>
+</body>
+</html>

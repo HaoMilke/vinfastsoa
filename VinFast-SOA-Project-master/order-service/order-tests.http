@@ -1,0 +1,36 @@
+@order_service = http://127.0.0.1:5003/api/v1
+
+### 1. TẠO ĐƠN HÀNG - THÀNH CÔNG (POST /orders)
+POST {{order_service}}/orders
+Content-Type: application/json
+
+{
+    "user_id": 1,
+    "items": [
+        {"car_id": 1, "quantity": 1},  <-- Số lượng nhỏ (1)
+        {"car_id": 2, "quantity": 2}   <-- Số lượng nhỏ (2)
+    ]
+}
+
+### 2. LẤY CHI TIẾT ĐƠN HÀNG (GET /orders/{id})
+# Mục tiêu: Xem chi tiết đơn hàng vừa tạo thành công (ID=1)
+# Kết quả mong đợi: 200 OK
+GET {{order_service}}/orders/1
+Accept: application/json
+
+
+### 3. KIỂM THỬ TẠO ĐƠN HÀNG - THẤT BẠI (Do Hết Tồn Kho)
+# Mục tiêu: Kiểm tra logic rollback (T3 gọi T2 bị từ chối)
+# Kết quả mong đợi: 409 Conflict
+POST {{order_service}}/orders
+Content-Type: application/json
+
+{
+    "user_id": 1,
+    "items": [
+        {
+            "car_id": 1, 
+            "quantity": 100
+        }
+    ]
+}

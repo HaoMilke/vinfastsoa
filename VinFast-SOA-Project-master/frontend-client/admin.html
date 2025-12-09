@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard Quản Lý Đơn Hàng</title>
+    <style>
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .status { font-weight: bold; padding: 3px 6px; border-radius: 4px; }
+        .Confirmed { background-color: #d4edda; color: #155724; }
+        .Pending { background-color: #fff3cd; color: #856404; }
+        .Canceled { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>Dashboard Quản Lý Đơn Hàng (Tích hợp SOA)</h1>
+    <p>Dashboard này gọi API từ 3 dịch vụ khác nhau: User (5001), Catalog (5002), Order (5003).</p>
+    
+    <button onclick="loadDashboard()">Tải Lại Dữ liệu</button>
+    <p id="status-message" style="color: red;"></p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID Đơn hàng</th>
+                <th>Tên Khách Hàng (Từ T1)</th>
+                <th>Chi tiết Sản phẩm (Từ T2)</th>
+                <th>Tổng Tiền</th>
+                <th>Trạng Thái</th>
+            </tr>
+        </thead>
+        <tbody id="orders-table-body">
+            </tbody>
+    </table>
+
+    <script src="script.js"></script>
+    <script>
+        // Tải dữ liệu ngay khi trang được mở
+        loadDashboard();
+    </script>
+</body>
+</html>

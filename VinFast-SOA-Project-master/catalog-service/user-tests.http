@@ -1,0 +1,41 @@
+@catalog_service = http://127.0.0.1:5002/api/v1/catalog
+
+### 1. KIỂM THỬ LẤY TẤT CẢ DANH MỤC XE (GET /cars)
+# Mục tiêu: Frontend (T4) lấy danh sách xe để hiển thị.
+# Kết quả mong đợi: 200 OK
+GET {{catalog_service}}/cars
+Accept: application/json
+
+---
+
+### 2. KIỂM THỬ LẤY CHI TIẾT MỘT MẪU XE (GET /cars/{id})
+# Mục tiêu: Lấy thông tin VF 9. SỬ DỤNG ID = 1 (ID tự động đầu tiên).
+# Kết quả mong đợi: 200 OK
+GET {{catalog_service}}/cars/1
+Accept: application/json
+
+---
+
+@base_url = http://127.0.0.1:5002/api/v1
+
+### 3. KIỂM TRA TỒN KHO - THÀNH CÔNG
+
+POST {{base_url}}/inventory/check
+Content-Type: application/json
+
+{
+    "car_id": 2,
+    "quantity": 1
+}
+
+---
+
+### 4. KIỂM TRA TỒN KHO - THẤT BẠI
+### Ví dụ: Kiểm tra Tồn kho
+POST http://127.0.0.1:5002/api/v1/inventory/check
+Content-Type: application/json 
+
+{
+    "car_id": 2,
+    "quantity": 1
+}

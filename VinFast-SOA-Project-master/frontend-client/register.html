@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head><title>Đăng Ký Tài Khoản</title></head>
+<body>
+    <h1>Đăng Ký Tài Khoản VinFast</h1>
+    <form id="registerForm">
+        <input type="text" id="name" required placeholder="Họ và Tên">
+        <input type="email" id="email" required placeholder="Email">
+        <input type="password" id="password" required placeholder="Mật khẩu">
+        <button type="submit">Đăng Ký</button>
+        <p id="message"></p>
+    </form>
+    <a href="login.html">Đã có tài khoản? Đăng nhập</a>
+
+    <script src="script.js"></script>
+    <script>
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = document.getElementById('name').value;
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const msg = document.getElementById('message');
+        
+        const response = await fetch(`${BASE_GATEWAY_URL}/users/users/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, email, password })
+        });
+
+        if (response.ok) {
+            msg.textContent = '✅ Đăng ký thành công! Chuyển hướng đến Đăng nhập...';
+            setTimeout(() => {
+                window.location.href = 'login.html';
+            }, 2000);
+        } else {
+            const data = await response.json();
+            msg.textContent = `❌ Đăng ký thất bại: ${data.message || 'Lỗi không xác định'}`;
+        }
+    });
+    </script>
+</body>
+</html>
