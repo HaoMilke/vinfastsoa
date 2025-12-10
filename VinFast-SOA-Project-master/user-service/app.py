@@ -54,7 +54,7 @@ def initialize_db():
              db.create_all()
              # ... Logic tạo admin/user demo giữ nguyên ...
              # (Để ngắn gọn mình không paste lại đoạn tạo data demo, bạn giữ nguyên nhé)
-             pass
+             
 
 @app.before_request
 def setup_data():

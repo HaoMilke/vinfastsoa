@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <title>Admin Dashboard Quản Lý Đơn Hàng (L2)</title>
-    <!-- Thêm thư viện Tailwind CSS và Chart.js -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
     <style>
@@ -24,15 +23,12 @@
             Trang này hiển thị dữ liệu đã được ghép nối (Mashup) từ T1, T2, T3 và sử dụng Chart.js để biểu đồ hóa số liệu (Cấp độ 4).
         </p>
 
-        <!-- KPI CẤP 3: TỔNG DOANH THU & BIỂU ĐỒ -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
-            <!-- Card 1: Tổng Doanh thu Đã Xác nhận (Chức năng Cấp 3) -->
             <div id="revenue-card" class="card p-6 flex flex-col justify-center items-center">
                 <div class="text-lg font-semibold text-gray-500">Tổng Doanh thu Đã Xác nhận (Cấp 3)</div>
                 <div id="total-revenue" class="text-4xl font-extrabold text-green-600 mt-2">Đang tải...</div>
             </div>
             
-            <!-- Card 2: Biểu đồ Trạng thái Đơn hàng (T3 Data) -->
             <div class="card p-6 lg:col-span-1">
                 <h3 class="text-xl font-semibold mb-3">Tỷ lệ Trạng thái Đơn hàng (T3)</h3>
                 <div class="chart-container">
@@ -40,7 +36,6 @@
                 </div>
             </div>
             
-            <!-- Card 3: Biểu đồ Tồn kho Sản phẩm (T2 Data) -->
             <div class="card p-6 lg:col-span-1">
                 <h3 class="text-xl font-semibold mb-3">Phân bố Tồn kho Sản phẩm (T2)</h3>
                 <div class="chart-container">
@@ -49,7 +44,6 @@
             </div>
         </div>
 
-        <!-- BẢNG ĐƠN HÀNG GHÉP NỐI (Cấp 2) -->
         <div class="card p-6">
             <h3 class="text-xl font-semibold mb-4">Danh sách Đơn hàng (Mashup T1, T2, T3)</h3>
             <p id="status-message" class="text-red-500 mb-4"></p>
@@ -71,7 +65,8 @@
     </div>
     <script src="script.js"></script>
     <script>
-        // Hàm fetchAndRenderCharts (được định nghĩa trong script.js) sẽ là hàm khởi tạo chính
-        document.addEventListener('DOMContentLoaded', fetchAndRenderCharts);
+        // SỬA LỖI: Gọi đúng hàm tải dữ liệu chính khi trang tải xong
+        document.addEventListener('DOMContentLoaded', loadDashboard);
     </script>
 </body>
+</html>

@@ -1,60 +1,72 @@
 version: '3.8'
 
 services:
-  # 1. API GATEWAY
+  # 1. DỊCH VỤ NGƯỜI DÙNG (USER SERVICE - T1)
+  users:
+    build: ./user-service
+    container_name: vinfast-users
+    ports:
+      - "5001:5001"
+    environment:
+      # Key bí mật để tạo và giải mã JWT Token
+      - JWT_SECRET_KEY=vinfast_secret_key_mac_dinh_123
+    volumes:
+      # LƯU TRỮ VĨNH VIỄN DB: Ánh xạ thư mục instance ra ngoài máy thật.
+      - ./user-service/instance:/app/instance
+    restart: always
+
+  # 2. DỊCH VỤ DANH MỤC & TỒN KHO (CATALOG SERVICE - T2)
+  catalog:
+    build: ./catalog-service
+    container_name: vinfast-catalog
+    ports:
+      - "5002:5002"
+    volumes:
+      # LƯU TRỮ VĨNH VIỄN DB: Ánh xạ thư mục instance ra ngoài máy thật.
+      - ./catalog-service/instance:/app/instance
+    restart: always
+
+  # 3. DỊCH VỤ ĐẶT HÀNG (ORDER SERVICE - T3)
+  orders:
+    build: ./order-service
+    container_name: vinfast-orders
+    ports:
+      - "5003:5003"
+    environment:
+      # Khai báo URL của các dịch vụ khác (Sử dụng tên services trong Docker)
+      - USER_SERVICE_URL=http://users:5001
+      - CATALOG_SERVICE_URL=http://catalog:5002
+    volumes:
+      # LƯU TRỮ VĨNH VIỄN DB: Ánh xạ thư mục instance ra ngoài máy thật.
+      - ./order-service/instance:/app/instance
+    depends_on:
+      - users
+      - catalog
+    restart: always
+
+  # 4. API GATEWAY (L1)
   gateway:
     build: ./api-gateway
     container_name: vinfast-gateway
     ports:
       - "8000:8000"
     environment:
-      - USER_SERVICE_URL=http://user-service:5001/api/v1
-      - CATALOG_SERVICE_URL=http://catalog-service:5002/api/v1
-      - ORDER_SERVICE_URL=http://order-service:5003/api/v1
+      # Khai báo URL của các dịch vụ để Gateway định tuyến
+      - USER_SERVICE_URL=http://users:5001/api/v1
+      - CATALOG_SERVICE_URL=http://catalog:5002/api/v1
+      - ORDER_SERVICE_URL=http://orders:5003/api/v1
     depends_on:
-      - user-service
-      - catalog-service
-      - order-service
+      - users
+      - catalog
+      - orders
+    restart: always
 
-  # 2. USER SERVICE (Đã thêm JWT_SECRET_KEY)
-  user-service:
-    build: ./user-service
-    container_name: vinfast-user-service
-    ports:
-      - "5001:5001"
-    volumes:
-      - ./user-service/instance:/app/instance
-    environment:
-      - FLASK_APP=app.py
-      # KEY BẢO MẬT MỚI
-      - JWT_SECRET_KEY=Bi_Mat_VinFast_2025_!!!
-
-  # 3. CATALOG SERVICE
-  catalog-service:
-    build: ./catalog-service
-    container_name: vinfast-catalog-service
-    ports:
-      - "5002:5002"
-    volumes:
-      - ./catalog-service/instance:/app/instance
-    environment:
-      - FLASK_APP=app.py
-
-  # 4. ORDER SERVICE
-  order-service:
-    build: ./order-service
-    container_name: vinfast-order-service
-    ports:
-      - "5003:5003"
-    volumes:
-      - ./order-service/instance:/app/instance
-    environment:
-      - USER_SERVICE_URL=http://user-service:5001
-      - CATALOG_SERVICE_URL=http://catalog-service:5002
-
-  # 5. FRONTEND CLIENT
+  # 5. FRONTEND CLIENT (L2) - Nginx
   frontend:
     build: ./frontend-client
     container_name: vinfast-frontend
     ports:
-      - "8080:80"
+      - "80:80" # Truy cập: http://localhost:80
+    depends_on:
+      - gateway # Đảm bảo Gateway chạy trước
+    restart: always

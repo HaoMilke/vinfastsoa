@@ -148,9 +148,8 @@ if __name__ == '__main__':
     with app.app_context():
         db_path = 'catalog_service_v3.db'
         
-        # Xóa file DB cũ
-        if os.path.exists(db_path):
-             os.remove(db_path) 
+    
+      
              
         # Tạo DB và dữ liệu mới
         create_demo_data(CARS_DATA_DEMO)

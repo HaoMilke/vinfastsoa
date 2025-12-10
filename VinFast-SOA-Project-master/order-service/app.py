@@ -23,8 +23,7 @@ def initialize_db():
     """Tạo DB khi khởi động."""
     with app.app_context():
         db_path = 'order_service.db'
-        if os.path.exists(db_path):
-             os.remove(db_path) 
+    
         db.create_all()
         print("Đã khởi tạo DB Đơn hàng thành công.")
 
