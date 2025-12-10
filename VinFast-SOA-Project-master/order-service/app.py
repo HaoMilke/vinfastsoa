@@ -16,8 +16,8 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 
 # --- KHAI BÁO ENDPOINT CÁC DỊCH VỤ KHÁC ---
-USER_SERVICE_URL = "http://127.0.0.1:5001"
-CATALOG_SERVICE_URL = "http://127.0.0.1:5002"
+USER_SERVICE_URL = os.environ.get("USER_SERVICE_URL", "http://127.0.0.1:5001")
+CATALOG_SERVICE_URL = os.environ.get("CATALOG_SERVICE_URL", "http://127.0.0.1:5002")
 
 def initialize_db():
     """Tạo DB khi khởi động."""
@@ -169,4 +169,4 @@ if __name__ == '__main__':
         initialize_db()
         
     print("Order Service đang khởi động trên cổng 5003...")
-    app.run(port=5003, debug=True)
+app.run(host='0.0.0.0', port=5003, debug=True)

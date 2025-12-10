@@ -1,49 +1,215 @@
 <!DOCTYPE html>
 <html lang="vi">
-<head><title>Đăng Nhập Hệ Thống</title></head>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng Nhập | VinFast System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- CSS CHUNG CHO TRANG LOGIN & REGISTER --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* ẢNH NỀN VINFAST */
+            background: url('https://storage.googleapis.com/vinfast-data-01/styles/news_detail/public/2022_07/VinFast-VF-8-va-VF-9-7.jpg?itok=zQ0vL4g_') no-repeat center center fixed;
+            background-size: cover;
+            position: relative;
+        }
+
+        /* Lớp phủ màu tối để làm nổi bật form */
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.5); /* Độ tối 50% */
+            z-index: 1;
+        }
+
+        .auth-container {
+            position: relative;
+            z-index: 2; /* Nổi lên trên lớp phủ */
+            background: rgba(255, 255, 255, 0.95); /* Màu trắng hơi trong suốt */
+            width: 100%;
+            max-width: 420px;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .logo {
+            font-size: 32px;
+            font-weight: 700;
+            color: #1464F4; /* VinFast Blue */
+            margin-bottom: 5px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        
+        .subtitle { color: #666; margin-bottom: 30px; font-size: 15px; }
+
+        .form-group { margin-bottom: 20px; text-align: left; }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+            background-color: #f9f9f9;
+        }
+
+        input:focus {
+            border-color: #1464F4;
+            background-color: #fff;
+            box-shadow: 0 0 0 4px rgba(20, 100, 244, 0.1);
+            outline: none;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: #1464F4;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s;
+            margin-top: 10px;
+        }
+
+        button:hover { background-color: #0b4ec2; }
+        button:active { transform: scale(0.98); }
+
+        .message { margin-top: 15px; font-size: 14px; min-height: 20px; font-weight: 500; }
+        .message.success { color: #28a745; }
+        .message.error { color: #dc3545; }
+
+        .footer-link { margin-top: 25px; font-size: 14px; color: #666; }
+        .footer-link a { color: #1464F4; text-decoration: none; font-weight: 600; }
+        .footer-link a:hover { text-decoration: underline; }
+        
+        .back-home { margin-top: 10px; display: block; font-size: 13px; color: #888; text-decoration: none; }
+        .back-home:hover { color: #333; }
+    </style>
+</head>
 <body>
-    <h1>Đăng Nhập Hệ Thống VinFast</h1>
-    <form id="loginForm">
-        <input type="email" id="email" required placeholder="Email (admin@vinfast.com)">
-        <input type="password" id="password" required placeholder="Mật khẩu (123456)">
-        <button type="submit">Đăng nhập</button>
-        <p id="message"></p>
-    </form>
-    <a href="register.html">Đăng ký tài khoản mới</a>
+
+    <div class="overlay"></div>
+
+    <div class="auth-container">
+        <div class="logo">VinFast System</div>
+        <p class="subtitle">Đăng nhập để truy cập hệ thống</p>
+
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" required placeholder="admin@vinfast.com">
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Mật khẩu</label>
+                <input type="password" id="password" required placeholder="Nhập mật khẩu">
+            </div>
+
+            <button type="submit" id="btnSubmit">
+                <span id="btnText">Đăng Nhập</span>
+            </button>
+            
+            <p id="message" class="message"></p>
+        </form>
+
+        <div class="footer-link">
+            Chưa có tài khoản? <a href="register.html">Đăng ký ngay</a>
+        </div>
+        <a href="index.html" class="back-home">← Quay về Trang chủ</a>
+    </div>
 
     <script src="script.js"></script>
     <script>
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const email = document.getElementById('email').value;
-        const password = document.getElementById('password').value;
+        // Logic xử lý form (giữ nguyên logic của bạn, chỉ thay đổi giao diện HTML)
+        const loginForm = document.getElementById('loginForm');
+        const btnSubmit = document.getElementById('btnSubmit');
+        const btnText = document.getElementById('btnText');
         const msg = document.getElementById('message');
-        
-        const response = await fetch(`${BASE_GATEWAY_URL}/users/users/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
-        });
 
-        if (response.ok) {
-            const data = await response.json();
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
             
-            // XỬ LÝ TOKEN: Lưu token và ID
-            saveToken(data.token);
-            const userId = getUserIdFromToken(data.token);
-            
-            // Dùng ID để kiểm tra và gắn cho các giao dịch
-            if (userId) localStorage.setItem('user_id', userId); 
-            
-            msg.textContent = '✅ Đăng nhập thành công! Chuyển hướng...';
-            setTimeout(() => {
-                 // Chuyển hướng đến Dashboard Admin hoặc trang đặt hàng
-                window.location.href = 'index.html'; 
-            }, 1000);
-        } else {
-            msg.textContent = '❌ Đăng nhập thất bại. Vui lòng kiểm tra lại.';
-        }
-    });
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            btnSubmit.disabled = true;
+            btnText.textContent = 'Đang xử lý...';
+            msg.textContent = '';
+            msg.className = 'message';
+
+            try {
+                // Gọi API Gateway (T4)
+                const response = await fetch(`${BASE_GATEWAY_URL}/users/users/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    msg.textContent = '✅ Đăng nhập thành công!';
+                    msg.className = 'message success';
+                    
+                    // Lưu Token
+                    saveToken(data.token);
+                    
+                    // Lấy User ID để kiểm tra Role (Logic phụ trợ)
+                    const userId = getUserIdFromToken(data.token);
+                    if (userId) {
+                        localStorage.setItem('user_id', userId);
+                    }
+
+                    setTimeout(() => {
+                        // Nếu là admin thì vào trang admin, ngược lại về trang chủ
+                        if (email.includes('admin')) {
+                            window.location.href = 'admin.html';
+                        } else {
+                            window.location.href = 'index.html';
+                        }
+                    }, 1000);
+                } else {
+                    msg.textContent = `❌ ${data.message}`;
+                    msg.className = 'message error';
+                    btnSubmit.disabled = false;
+                    btnText.textContent = 'Đăng nhập';
+                }
+            } catch (error) {
+                console.error(error);
+                msg.textContent = '❌ Lỗi kết nối đến Server!';
+                msg.className = 'message error';
+                btnSubmit.disabled = false;
+                btnText.textContent = 'Đăng nhập';
+            }
+        });
     </script>
 </body>
 </html>

@@ -156,4 +156,4 @@ if __name__ == '__main__':
         create_demo_data(CARS_DATA_DEMO)
             
     print("Catalog Service đang khởi động trên cổng 5002...")
-    app.run(port=5002, debug=True)
+app.run(host='0.0.0.0', port=5002, debug=True)

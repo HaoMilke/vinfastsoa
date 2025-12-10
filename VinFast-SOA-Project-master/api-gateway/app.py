@@ -10,9 +10,9 @@ CORS(app) # Cho phép Frontend truy cập Gateway
 
 # Định nghĩa URL của các dịch vụ Back-end (Luôn dùng cổng 500x)
 SERVICES = {
-    "users": "http://127.0.0.1:5001/api/v1",
-    "catalog": "http://127.0.0.1:5002/api/v1",
-    "orders": "http://127.0.0.1:5003/api/v1"
+    "users": os.environ.get("USER_SERVICE_URL", "http://127.0.0.1:5001/api/v1"),
+    "catalog": os.environ.get("CATALOG_SERVICE_URL", "http://127.0.0.1:5002/api/v1"),
+    "orders": os.environ.get("ORDER_SERVICE_URL", "http://127.0.0.1:5003/api/v1")
 }
 
 @app.route('/<service>/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
@@ -46,6 +46,6 @@ def gateway_router(service, path):
         return jsonify({"error": f"Gateway failed to connect to {service}"}), 503
 
 if __name__ == '__main__':
-    # Chạy trên cổng độc lập 8000
-    print("API Gateway đang khởi động tpython gateway_app.pyrên cổng 8000...")
-    app.run(port=8000, debug=True)
+    print("API Gateway đang khởi động trên cổng 8000...")
+    # THÊM host='0.0.0.0'
+    app.run(host='0.0.0.0', port=8000, debug=True)

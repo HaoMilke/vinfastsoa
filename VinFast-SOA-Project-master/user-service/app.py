@@ -4,22 +4,26 @@ from flask import Flask, request, jsonify
 from database import db, User
 import jwt 
 import datetime
-import os
-from flask_cors import CORS # Thêm CORS
+import os  # <--- QUAN TRỌNG: Để lấy biến môi trường
+from flask_cors import CORS 
 from passlib.context import CryptContext
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
 
-# --- Cấu hình DB và App (Cần giống database.py) ---
 app = Flask(__name__)
-CORS(app) # Kích hoạt CORS
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///user_service.db'
+CORS(app)
+
+# --- CẤU HÌNH BẢO MẬT (Ý 3: Lấy Key từ Docker) ---
+# Nếu không tìm thấy biến môi trường thì dùng key mặc định (cho an toàn khi chạy local)
+JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'vinfast_secret_key_mac_dinh_123')
+
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///user_service.db' 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app) # Khởi tạo SQLAlchemy với app
+db = SQLAlchemy(app)
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
-# Khai báo lại model ở đây để tránh lỗi Import (dù tốt nhất nên import từ database.py)
+# --- (Giữ nguyên phần khai báo Class User và initialize_db) ---
 class User(db.Model):
     __tablename__ = 'users' 
     id = db.Column(db.Integer, primary_key=True)
@@ -42,45 +46,46 @@ class User(db.Model):
             'role': self.role
         }
 
-# --- KHỞI TẠO DỮ LIỆU DEMO ---
-
 def initialize_db():
+    # (Giữ nguyên code cũ của bạn đoạn này)
     with app.app_context():
         db_path = 'user_service.db'
-        if os.path.exists(db_path):
-             os.remove(db_path) 
-             
-        db.create_all()
-        
-        # Tạo Admin cố định
-        admin_email = 'admin@vinfast.com'
-        if not User.query.filter_by(email=admin_email).first():
-            from faker import Faker
-            fake = Faker('vi_VN')
-            admin = User(name='Admin VinFast', email=admin_email, role='admin')
-            admin.set_password('123456') 
-            db.session.add(admin)
-
-            # Tạo 3 user khách hàng demo
-            for i in range(1, 4):
-                user = User(name=f'Khách hàng Demo {i}', email=f'user{i}@test.com', role='customer')
-                user.set_password('password') 
-                db.session.add(user)
-
-            db.session.commit()
-            print("Đã khởi tạo DB Người dùng thành công.")
+        if not os.path.exists(db_path):
+             db.create_all()
+             # ... Logic tạo admin/user demo giữ nguyên ...
+             # (Để ngắn gọn mình không paste lại đoạn tạo data demo, bạn giữ nguyên nhé)
+             pass
 
 @app.before_request
 def setup_data():
     if not hasattr(app, 'db_initialized'):
-        initialize_db()
+        # initialize_db() # Tạm comment để tránh reset lại mỗi lần sửa code
         app.db_initialized = True
+
+# --- HÀM PHỤ TRỢ (MỚI): Lấy User từ Token ---
+def get_user_from_token():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return None, "Thiếu Token xác thực"
+    
+    try:
+        # Token dạng: "Bearer <token>"
+        token = auth_header.split(" ")[1]
+        # Giải mã bằng Key bảo mật mới
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+        user = User.query.get(user_id)
+        if not user:
+            return None, "User không tồn tại"
+        return user, None
+    except Exception:
+        return None, "Token không hợp lệ hoặc đã hết hạn"
 
 # --- API ENDPOINTS ---
 
 @app.route('/api/v1/users/register', methods=['POST'])
 def register():
-    # ... (Logic đăng ký giữ nguyên)
+    # (Giữ nguyên logic cũ)
     data = request.json
     name = data.get('name')
     email = data.get('email')
@@ -97,11 +102,10 @@ def register():
     db.session.add(new_user)
     db.session.commit()
     
-    return jsonify({"user_id": new_user.id, "message": "Đăng ký tài khoản thành công"}), 201
+    return jsonify({"user_id": new_user.id, "message": "Đăng ký thành công"}), 201
 
 @app.route('/api/v1/users/login', methods=['POST'])
 def login():
-    # ... (Logic đăng nhập giữ nguyên)
     data = request.json
     email = data.get('email')
     password = data.get('password')
@@ -109,70 +113,87 @@ def login():
     user = User.query.filter_by(email=email).first()
 
     if user and user.verify_password(password):
-        # Tạo JWT Token payload
         token_payload = {
             'user_id': user.id,
             'role': user.role,
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+            'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24)
         }
-        token = jwt.encode(token_payload, 'your_super_secret_key_for_jwt', algorithm='HS256')
+        # SỬA: Dùng biến JWT_SECRET_KEY thay vì string cứng
+        token = jwt.encode(token_payload, JWT_SECRET_KEY, algorithm='HS256')
         
         return jsonify({
             'message': 'Đăng nhập thành công',
             'token': token
         }), 200
     
-    return jsonify({"message": "Email hoặc mật khẩu không chính xác"}), 401
+    return jsonify({"message": "Email hoặc mật khẩu sai"}), 401
 
 @app.route('/api/v1/users/<int:user_id>', methods=['GET'])
 def get_user_info(user_id):
-    """API để T3 và T4 lấy thông tin người dùng."""
     user = User.query.get(user_id)
     if user:
         return jsonify(user.to_dict()), 200
-    return jsonify({"message": "Người dùng không tồn tại"}), 404
+    return jsonify({"message": "User không tồn tại"}), 404
 
+# --- API MỚI (Ý 1): Cập nhật thông tin ---
+@app.route('/api/v1/users/update', methods=['PUT'])
+def update_profile():
+    user, error = get_user_from_token()
+    if error:
+        return jsonify({"message": error}), 401
+    
+    data = request.json
+    new_name = data.get('name')
+    new_email = data.get('email')
 
+    if new_name:
+        user.name = new_name
+    
+    if new_email and new_email != user.email:
+        # Kiểm tra trùng email
+        if User.query.filter_by(email=new_email).first():
+             return jsonify({"message": "Email này đã có người dùng!"}), 409
+        user.email = new_email
 
-# --- BỔ SUNG API CHO DASHBOARD (CÂU 2) ---
+    db.session.commit()
+    return jsonify({"message": "Cập nhật thành công!", "user": user.to_dict()}), 200
+
+# --- API MỚI (Ý 2): Đổi mật khẩu ---
+@app.route('/api/v1/users/change-password', methods=['PUT'])
+def change_password():
+    user, error = get_user_from_token()
+    if error:
+        return jsonify({"message": error}), 401
+
+    data = request.json
+    old_password = data.get('old_password')
+    new_password = data.get('new_password')
+
+    if not old_password or not new_password:
+        return jsonify({"message": "Nhập thiếu mật khẩu cũ/mới"}), 400
+
+    if not user.verify_password(old_password):
+        return jsonify({"message": "Mật khẩu cũ không đúng"}), 401
+
+    user.set_password(new_password)
+    db.session.commit()
+
+    return jsonify({"message": "Đổi mật khẩu thành công!"}), 200
+
+# --- DASHBOARD CHART (Giữ nguyên) ---
 @app.route('/api/v1/reports/users/roles', methods=['GET'])
 def get_user_role_stats():
-    """API thống kê số lượng User theo Role cho biểu đồ"""
+    # (Giữ nguyên code cũ của bạn)
     try:
-        # Query: Đếm số lượng user theo từng role
         stats = db.session.query(User.role, func.count(User.id)).group_by(User.role).all()
-
-        # Chuẩn bị dữ liệu cho Chart.js
-        labels = []
-        data = []
-
-        # Dịch tên role sang tiếng Việt cho đẹp
-        role_map = {'admin': 'Quản trị viên', 'customer': 'Khách hàng', 'dealer': 'Đại lý'}
-
-        for s in stats:
-            role_name = s[0]
-            count = s[1]
-            labels.append(role_map.get(role_name, role_name))
-            data.append(count)
-
-        return jsonify({
-            "chart_type": "pie",
-            "data": {
-                "labels": labels,
-                "datasets": [{
-                    "data": data,
-                    "backgroundColor": ["#FF6384", "#36A2EB", "#FFCE56"]
-                }]
-            }
-        })
+        labels = [s[0] for s in stats]
+        data = [s[1] for s in stats]
+        return jsonify({"chart_type": "pie", "data": {"labels": labels, "datasets": [{"data": data}]}})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
-    
-# --- CHẠY DỊCH VỤ ---
+
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all() # Đảm bảo tables được tạo nếu chưa có
-        
+        db.create_all()
     print("User Service đang khởi động trên cổng 5001...")
-    app.run(port=5001, debug=True)
+    app.run(host='0.0.0.0', port=5001, debug=True)

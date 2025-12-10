@@ -1,16 +1,83 @@
 <!DOCTYPE html>
 <html lang="vi">
-<head><title>Đăng Ký Tài Khoản</title></head>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng Ký | VinFast System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* CSS COPY TỪ FILE LOGIN.HTML ĐỂ ĐỒNG BỘ */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: url('https://storage.googleapis.com/vinfast-data-01/styles/news_detail/public/2022_07/VinFast-VF-8-va-VF-9-7.jpg?itok=zQ0vL4g_') no-repeat center center fixed;
+            background-size: cover;
+            position: relative;
+        }
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.5); z-index: 1;
+        }
+        .auth-container {
+            position: relative; z-index: 2;
+            background: rgba(255, 255, 255, 0.95);
+            width: 100%; max-width: 420px;
+            padding: 40px; border-radius: 12px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            animation: fadeIn 0.5s ease-out;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+        .logo { font-size: 32px; font-weight: 700; color: #1464F4; margin-bottom: 5px; text-transform: uppercase; }
+        .subtitle { color: #666; margin-bottom: 30px; font-size: 15px; }
+        .form-group { margin-bottom: 20px; text-align: left; }
+        label { display: block; margin-bottom: 8px; color: #333; font-weight: 600; font-size: 14px; }
+        input { width: 100%; padding: 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; background-color: #f9f9f9; }
+        input:focus { border-color: #1464F4; background-color: #fff; outline: none; }
+        button { width: 100%; padding: 14px; background-color: #1464F4; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 10px; }
+        button:hover { background-color: #0b4ec2; }
+        .message { margin-top: 15px; font-size: 14px; font-weight: 500; }
+        .message.success { color: #28a745; }
+        .message.error { color: #dc3545; }
+        .footer-link { margin-top: 25px; font-size: 14px; color: #666; }
+        .footer-link a { color: #1464F4; text-decoration: none; font-weight: 600; }
+    </style>
+</head>
 <body>
-    <h1>Đăng Ký Tài Khoản VinFast</h1>
-    <form id="registerForm">
-        <input type="text" id="name" required placeholder="Họ và Tên">
-        <input type="email" id="email" required placeholder="Email">
-        <input type="password" id="password" required placeholder="Mật khẩu">
-        <button type="submit">Đăng Ký</button>
-        <p id="message"></p>
-    </form>
-    <a href="login.html">Đã có tài khoản? Đăng nhập</a>
+    <div class="overlay"></div>
+
+    <div class="auth-container">
+        <div class="logo">VinFast System</div>
+        <p class="subtitle">Tạo tài khoản thành viên mới</p>
+
+        <form id="registerForm">
+            <div class="form-group">
+                <label for="name">Họ và Tên</label>
+                <input type="text" id="name" required placeholder="Nguyễn Văn A">
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" required placeholder="email@example.com">
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Mật khẩu</label>
+                <input type="password" id="password" required placeholder="Tự chọn mật khẩu">
+            </div>
+
+            <button type="submit" id="btnRegister">Đăng Ký</button>
+            <p id="message" class="message"></p>
+        </form>
+
+        <div class="footer-link">
+            Đã có tài khoản? <a href="login.html">Đăng nhập</a>
+        </div>
+    </div>
 
     <script src="script.js"></script>
     <script>
@@ -19,22 +86,40 @@
         const name = document.getElementById('name').value;
         const email = document.getElementById('email').value;
         const password = document.getElementById('password').value;
+        
+        const btnRegister = document.getElementById('btnRegister');
         const msg = document.getElementById('message');
         
-        const response = await fetch(`${BASE_GATEWAY_URL}/users/users/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, email, password })
-        });
+        btnRegister.disabled = true;
+        btnRegister.textContent = 'Đang xử lý...';
+        msg.textContent = '';
+        msg.className = 'message';
+        
+        try {
+            const response = await fetch(`${BASE_GATEWAY_URL}/users/users/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, password })
+            });
 
-        if (response.ok) {
-            msg.textContent = '✅ Đăng ký thành công! Chuyển hướng đến Đăng nhập...';
-            setTimeout(() => {
-                window.location.href = 'login.html';
-            }, 2000);
-        } else {
-            const data = await response.json();
-            msg.textContent = `❌ Đăng ký thất bại: ${data.message || 'Lỗi không xác định'}`;
+            if (response.ok) {
+                msg.textContent = '✅ Đăng ký thành công! Đang chuyển hướng...';
+                msg.className = 'message success';
+                setTimeout(() => {
+                    window.location.href = 'login.html';
+                }, 1500);
+            } else {
+                const data = await response.json();
+                msg.textContent = `❌ Đăng ký thất bại: ${data.message || 'Lỗi không xác định'}`;
+                msg.className = 'message error';
+                btnRegister.disabled = false;
+                btnRegister.textContent = 'Đăng Ký';
+            }
+        } catch (error) {
+            msg.textContent = '❌ Lỗi kết nối Gateway!';
+            msg.className = 'message error';
+            btnRegister.disabled = false;
+            btnRegister.textContent = 'Đăng Ký';
         }
     });
     </script>
