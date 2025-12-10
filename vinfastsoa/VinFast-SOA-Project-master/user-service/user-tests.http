@@ -1,0 +1,30 @@
+### 1. Kiểm thử Đăng ký Người dùng Mới (REGISTER)
+# POST http://localhost:5001/api/v1/users/register
+POST http://127.0.0.1:5001/api/v1/users/register
+Content-Type: application/json
+
+{
+  "name": "Khach Hang Moi A",
+  "email": "kh_a_moi@vinfast.com",
+  "password": "passwordA"
+}
+
+### 2. Kiểm thử Đăng nhập (LOGIN)
+# Mục tiêu: Lấy JWT Token
+POST http://127.0.0.1:5001/api/v1/users/login
+Content-Type: application/json
+
+{
+  "email": "admin@vinfast.com",
+  "password": "123456"
+}
+
+### 3. Kiểm thử Lấy Thông tin User (GET - Dành cho T3 và T4)
+# Mục tiêu: Dịch vụ khác tra cứu thông tin khách hàng (ID 1 là Admin)
+GET http://127.0.0.1:5001/api/v1/users/1
+Accept: application/json
+
+### 4. Kiểm thử Lấy Thông tin User Không Tồn Tại
+GET http://127.0.0.1:5001/api/v1/users/9999
+Accept: application/json### 
+

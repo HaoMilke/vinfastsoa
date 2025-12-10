@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Trang Chủ - Danh mục Xe VinFast</title>
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- CSS BỐ CỤC CHUNG --- */
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; display: flex; flex-direction: column; min-height: 100vh; background-color: #f8f8f8; }
+        
+        /* HEADER */
+        header { background-color: white; color: #333; padding: 15px 40px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+        
+        .header-logo img { height: 35px; margin-right: 30px; }
+        
+        .main-menu a { color: #555; text-decoration: none; margin-right: 25px; font-weight: 600; font-size: 1em; transition: color 0.3s; }
+        .main-menu a:hover { color: #1464F4; }
+        
+        .header-actions { display: flex; align-items: center; gap: 15px; }
+        .header-actions a { text-decoration: none; font-weight: 600; font-size: 0.95em; }
+        #login-link { color: #1464F4; }
+        
+        .btn-primary { 
+            background-color: #1464F4; 
+            color: white !important;
+            padding: 8px 20px; 
+            border-radius: 20px; 
+            transition: background 0.3s;
+        }
+        .btn-primary:hover { background-color: #0b4ec2; }
+        
+        .header-left, .header-right { display: flex; align-items: center; }
+
+        /* MAIN CONTENT */
+        main { flex-grow: 1; padding: 30px 40px; max-width: 1200px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+        
+        .search-container { margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
+        .search-bar { padding: 12px; border: 1px solid #ddd; border-radius: 8px; width: 300px; font-size: 1em; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
+        
+        .car-list-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 30px; }
+        
+        /* CARD SẢN PHẨM */
+        .car-card { background-color: white; border: none; padding: 0; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); overflow: hidden; transition: transform 0.3s; display: flex; flex-direction: column; }
+        .car-card:hover { transform: translateY(-5px); box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+        
+        .car-card img { 
+            width: 100%; height: 200px; object-fit: cover; 
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .card-body { padding: 20px; flex-grow: 1; display: flex; flex-direction: column; }
+        .car-card h2 { color: #333; font-size: 1.4em; margin: 0 0 10px 0; }
+        .price { color: #1464F4; font-size: 1.2em; font-weight: bold; margin-bottom: 10px; }
+        .desc { font-size: 0.9em; color: #666; margin-bottom: 20px; flex-grow: 1; line-height: 1.5; }
+        
+        .car-card button { 
+            background-color: #1464F4; color: white; border: none; padding: 12px; width: 100%; 
+            border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 1em;
+            transition: background 0.2s;
+        }
+        .car-card button:hover { background-color: #0b4ec2; }
+
+        footer { background-color: #333; color: white; text-align: center; padding: 20px; font-size: 0.9em; margin-top: 40px; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <a href="index.html" class="header-logo">
+                <img src="vinfast_logo.png" alt="VinFast Logo" onerror="this.style.display='none';document.write('<b>VINFAST</b>')"> 
+            </a>
+            <nav class="main-menu">
+                <a href="index.html">Ô tô</a>
+                <a href="#">Xe máy điện</a>
+                <a href="#">Dịch vụ</a>
+            </nav>
+        </div>
+        <div class="header-right">
+            <div class="header-actions">
+                <a href="login.html" id="login-link">Đăng nhập</a>
+                <a href="register.html" class="btn-primary">Đăng ký</a>
+                <a href="#" id="logout-link" style="display: none;" class="btn-primary" style="background-color: #666;">Đăng xuất</a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="search-container">
+            <h2>Danh Mục Xe Điện & Xăng</h2>
+            <input type="text" id="search-input" class="search-bar" placeholder="Tìm kiếm mẫu xe (VF 8, Lux A...)">
+        </div>
+        
+        <div id="car-list" class="car-list-grid">
+            <p>Đang tải danh sách xe...</p>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 VinFast SOA Project. Hệ thống bán xe trực tuyến.</p>
+    </footer>
+
+    <script src="script.js"></script>
+    
+    <script>
+        // --- LOGIC RIÊNG CỦA TRANG CHỦ (Load Xe) ---
+        // Biến lưu trữ danh sách xe để dùng cho bộ lọc tìm kiếm
+        let allCars = []; 
+
+        async function loadCarList() {
+            const carListDiv = document.getElementById('car-list');
+            carListDiv.innerHTML = '<p>Đang kết nối tới Catalog Service...</p>';
+            
+            try {
+                // Gọi API Gateway -> Catalog Service
+                // BASE_GATEWAY_URL được lấy từ file script.js
+                const response = await fetch(`${BASE_GATEWAY_URL}/catalog/catalog/cars`); 
+                
+                if (!response.ok) {
+                    carListDiv.innerHTML = `<p style="color:red">Lỗi tải dữ liệu (Mã: ${response.status}). Vui lòng kiểm tra Server.</p>`;
+                    return;
+                }
+                
+                allCars = await response.json(); 
+                displayCars(allCars); 
+
+            } catch (error) {
+                console.error(error);
+                carListDiv.innerHTML = `<p style="color:red">Không thể kết nối tới Gateway (${BASE_GATEWAY_URL}). Hãy đảm bảo Docker đang chạy.</p>`;
+            }
+        }
+
+        function displayCars(carsToDisplay) {
+            const carListDiv = document.getElementById('car-list');
+            carListDiv.innerHTML = ''; 
+            
+            if (carsToDisplay.length === 0) {
+                carListDiv.innerHTML = '<p>Không tìm thấy mẫu xe nào phù hợp.</p>';
+                return;
+            }
+
+            carsToDisplay.forEach(car => {
+                const priceVND = car.base_price.toLocaleString('vi-VN') + ' VND';
+                // Nếu không có ảnh thì dùng ảnh placeholder
+                const imageUrl = car.image_url || 'https://via.placeholder.com/400x250?text=VinFast+Image'; 
+
+                const carDiv = document.createElement('div');
+                carDiv.className = 'car-card';
+                carDiv.innerHTML = `
+                    <img src="${imageUrl}" alt="${car.model_name}" onerror="this.onerror=null;this.src='https://via.placeholder.com/400x250?text=Ảnh+Lỗi';"> 
+                    <div class="card-body">
+                        <h2>${car.model_name}</h2>
+                        <div class="price">${priceVND}</div>
+                        <div class="desc">${car.description || 'Đang cập nhật mô tả...'}</div>
+                        <button onclick="window.location.href='car_detail.html?car_id=${car.id}'">Xem Chi Tiết & Đặt Cọc</button>
+                    </div>
+                `;
+                carListDiv.appendChild(carDiv);
+            });
+        }
+
+        // --- TÍNH NĂNG TÌM KIẾM ---
+        document.getElementById('search-input').addEventListener('input', (event) => { 
+            const searchTerm = event.target.value.toLowerCase();
+            const filteredCars = allCars.filter(car => 
+                car.model_name.toLowerCase().includes(searchTerm) ||
+                (car.description && car.description.toLowerCase().includes(searchTerm))
+            );
+            displayCars(filteredCars);
+        });
+
+        // Khởi chạy khi load trang
+        loadCarList();
+    </script>
+</body>
+</html>

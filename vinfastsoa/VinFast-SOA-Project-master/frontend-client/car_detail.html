@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Chi Tiết & Đặt Hàng</title>
+    <style>
+        /* --- CSS BỐ CỤC CHUNG (GIỮ NGUYÊN) --- */
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; display: flex; flex-direction: column; min-height: 100vh; background-color: #f8f8f8; }
+        main { flex-grow: 1; padding: 20px 40px; }
+        footer { background-color: #333; color: white; text-align: center; padding: 15px; font-size: 0.9em; }
+        
+        /* --- CSS HEADER (GIỮ NGUYÊN) --- */
+        header { background-color: white; color: #333; padding: 10px 40px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .header-logo img { height: 30px; margin-right: 30px; }
+        .main-menu a { color: #555; text-decoration: none; margin-right: 20px; font-weight: 500; font-size: 0.95em; transition: color 0.3s; }
+        .main-menu a:hover { color: #0070c0; }
+        .header-actions a { color: #0070c0; text-decoration: none; margin-left: 15px; font-weight: bold; font-size: 0.9em; }
+        .btn-primary { background-color: #f8f8f8; color: white; padding: 8px 15px; border-radius: 4px; }
+        .header-left, .header-right, .header-actions { display: flex; align-items: center; }
+
+        /* --- CSS NỘI DUNG CHI TIẾT VÀ FORM --- */
+        .details-container { background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .details-container h1 { color: #0070c0; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 0; }
+        .details-container strong { color: #333; font-size: 1.1em; }
+        .order-section { margin-top: 20px; padding: 25px; border: 1px solid #ddd; background-color: #fff; border-radius: 8px; }
+        .order-section button { background-color: #ff0000; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
+        .error-msg { color: red; font-weight: bold; margin-top: 10px; }
+        .success-msg { color: green; font-weight: bold; margin-top: 10px; }
+
+        .car-detail-image { /* <-- STYLE CHO ẢNH CHI TIẾT */
+            max-width: 80%; /* Chiếm phần lớn container */
+            height: auto;
+            max-height: 450px;
+            object-fit: contain;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <a href="index.html" class="header-logo">
+                <img src="vinfast_logo.png" alt="VinFast Logo" height="30"> 
+            </a>
+            <nav class="main-menu">
+                <a href="index.html">Ô tô</a>
+                <a href="#">Dịch vụ</a>
+                <a href="#">Sự kiện</a>
+            </nav>
+        </div>
+        <div class="header-right">
+            <div class="header-actions">
+                <a href="login.html" id="login-link">Đăng nhập</a>
+                <a href="register.html" class="btn-primary">Đăng ký</a>
+                <a href="#" id="logout-link" style="display: none;" class="btn-primary">Đăng xuất</a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="details-container">
+            <a href="index.html">← Quay lại Danh mục</a>
+            <div id="car-details">Đang tải chi tiết xe...</div>
+        </div>
+        
+        <div class="order-section">
+            <h2 id="order-title">Thực hiện Đặt Cọc</h2>
+            <form id="orderForm">
+                <label for="quantity">Số lượng:</label>
+                <input type="number" id="quantity" value="1" min="1" required style="padding: 8px;">
+                <button type="submit">Đặt Cọc (100.000.000 VND)</button>
+                <p id="order-message" class="error-msg"></p>
+            </form>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 VinFast SOA Project. Được thiết kế bởi nhóm bạn.</p>
+    </footer>
+
+    <script src="script.js"></script>
+    <script>
+    // --- LOGIC JS ĐẶT HÀNG (GIỮ NGUYÊN) ---
+    // (Các hàm getAuthHeader, getUserIdFromToken, BASE_GATEWAY_URL được định nghĩa trong script.js)
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const carIdRaw = urlParams.get('car_id'); 
+    const carId = parseInt(carIdRaw); 
+
+    if (isNaN(carId)) {
+        document.getElementById('car-details').innerHTML = '<h1>Lỗi: ID xe không hợp lệ.</h1><p>Vui lòng chọn xe từ trang danh mục.</p>';
+        document.getElementById('order-title').style.display = 'none';
+    } else {
+        loadCarDetails();
+    }
+    
+    async function loadCarDetails() {
+        try {
+            const response = await fetch(`${BASE_GATEWAY_URL}/catalog/catalog/cars/${carId}`);
+            
+            if (response.ok) {
+                const car = await response.json();
+                const imageUrl = car.image_url || 'https://via.placeholder.com/600x400?text=No+Image'; // Lấy ảnh từ T2
+                
+                document.getElementById('car-details').innerHTML = `
+                    <img src="${imageUrl}" alt="${car.model_name}" class="car-detail-image" onerror="this.onerror=null;this.src='https://via.placeholder.com/600x400?text=Image+Error';">
+                    <h1>${car.model_name}</h1>
+                    <p>Mô tả: ${car.description || "Không có mô tả."}</p>
+                    <p>Thông số: <strong>${JSON.stringify(car.specs)}</strong></p>
+                    <p>Giá niêm yết: <strong>${car.base_price.toLocaleString('vi-VN')} VND</strong></p>
+                `;
+            } else {
+                document.getElementById('car-details').innerHTML = `<h1>Lỗi: Không tìm thấy mẫu xe (Mã: ${response.status})</h1>`;
+            }
+        } catch (error) {
+            document.getElementById('car-details').innerHTML = `<h1>Lỗi kết nối: Đảm bảo T2 và Gateway đang chạy!</h1>`;
+        }
+    }
+    
+    // XỬ LÝ ĐẶT HÀNG (GỌI T3)
+    document.getElementById('orderForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const userId = localStorage.getItem('user_id'); 
+        const quantity = parseInt(document.getElementById('quantity').value);
+        const msg = document.getElementById('order-message');
+        
+        if (!userId) {
+             msg.textContent = '❌ Lỗi: Vui lòng đăng nhập để thực hiện giao dịch.';
+             return;
+        }
+
+        const body = {
+            user_id: parseInt(userId), 
+            items: [{ car_id: carId, quantity: quantity }]
+        };
+
+        const response = await fetch(`${BASE_GATEWAY_URL}/orders/orders`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeader()
+            },
+            body: JSON.stringify(body)
+        });
+
+        if (response.status === 201) {
+            msg.className = 'success-msg';
+            msg.textContent = '✅ ĐẶT HÀNG THÀNH CÔNG! Quay lại Danh mục để tiếp tục mua sắm.';
+        } else if (response.status === 409) {
+            msg.className = 'error-msg';
+            msg.textContent = '⚠️ ĐẶT HÀNG THẤT BẠI: Số lượng yêu cầu vượt quá tồn kho hiện tại (Conflict).';
+        } else {
+             const errorData = await response.json().catch(() => ({ message: 'Server trả về lỗi không mong muốn.' }));
+             msg.className = 'error-msg';
+             msg.textContent = `❌ LỖI GIAO DỊCH: ${errorData.message || 'Server trả về lỗi không mong muốn.'}`;
+        }
+    });
+
+
+    // LOGIC HIỂN THỊ ĐĂNG NHẬP/ĐĂNG XUẤT CHO HEADER
+    const loginLink = document.getElementById('login-link');
+    const logoutLink = document.getElementById('logout-link');
+    const registerButton = document.querySelector('.header-actions .btn-primary'); 
+
+    const token = localStorage.getItem('jwt_token');
+    if (token) {
+        loginLink.style.display = 'none';
+        registerButton.style.display = 'none';
+        logoutLink.style.display = 'inline';
+    } else {
+        loginLink.style.display = 'inline';
+        registerButton.style.display = 'inline';
+        logoutLink.style.display = 'none';
+    }
+
+    logoutLink.addEventListener('click', function(e) {
+        e.preventDefault();
+        localStorage.removeItem('jwt_token');
+        localStorage.removeItem('user_id');
+        window.location.href = 'index.html';
+    });
+
+    // Gọi hàm load chi tiết xe
+    loadCarDetails();
+    </script>
+</body>
+</html>

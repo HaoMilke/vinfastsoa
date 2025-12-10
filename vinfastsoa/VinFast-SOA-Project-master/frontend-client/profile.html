@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Hồ Sơ Của Tôi | VinFast</title>
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f4f9; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; }
+        .container { width: 100%; max-width: 800px; margin-top: 50px; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1 { color: #1464F4; text-align: center; margin-bottom: 30px; }
+        .section { margin-bottom: 40px; padding-bottom: 20px; border-bottom: 1px solid #eee; }
+        .section:last-child { border-bottom: none; }
+        h2 { font-size: 18px; color: #333; margin-bottom: 15px; }
+        
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; color: #555; }
+        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        input:disabled { background-color: #eee; color: #888; }
+
+        button { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; transition: 0.3s; }
+        .btn-save { background-color: #1464F4; }
+        .btn-save:hover { background-color: #0b4ec2; }
+        .btn-danger { background-color: #dc3545; }
+        .btn-back { background-color: #6c757d; text-decoration: none; display: inline-block; text-align: center; }
+        
+        .msg { margin-top: 10px; font-size: 14px; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Quản Lý Hồ Sơ</h1>
+
+        <div class="section">
+            <h2>👤 Thông tin cá nhân</h2>
+            <form id="profileForm">
+                <div class="form-group">
+                    <label>Họ và Tên</label>
+                    <input type="text" id="fullname" required>
+                </div>
+                <div class="form-group">
+                    <label>Email (Dùng để đăng nhập)</label>
+                    <input type="email" id="email" required>
+                </div>
+                <div class="form-group">
+                    <label>Vai trò</label>
+                    <input type="text" id="role" disabled>
+                </div>
+                <button type="submit" class="btn-save">Lưu Thay Đổi</button>
+                <p id="profileMsg" class="msg"></p>
+            </form>
+        </div>
+
+        <div class="section">
+            <h2>🔒 Đổi Mật Khẩu</h2>
+            <form id="passwordForm">
+                <div class="form-group">
+                    <label>Mật khẩu cũ</label>
+                    <input type="password" id="oldPass" required placeholder="Nhập mật khẩu hiện tại">
+                </div>
+                <div class="form-group">
+                    <label>Mật khẩu mới</label>
+                    <input type="password" id="newPass" required placeholder="Nhập mật khẩu mới">
+                </div>
+                <button type="submit" class="btn-danger">Đổi Mật Khẩu</button>
+                <p id="passMsg" class="msg"></p>
+            </form>
+        </div>
+
+        <div style="text-align: center;">
+            <a href="index.html" class="btn-back" style="padding: 10px 20px; color: white; border-radius: 6px;">← Quay về Trang chủ</a>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        // Logic riêng cho trang Profile
+        async function loadProfile() {
+            const userId = localStorage.getItem('user_id');
+            if (!userId) window.location.href = 'login.html';
+
+            // Gọi API lấy thông tin cũ để điền vào form
+            try {
+                const response = await fetch(`${BASE_GATEWAY_URL}/users/users/${userId}`);
+                const user = await response.json();
+                
+                document.getElementById('fullname').value = user.name;
+                document.getElementById('email').value = user.email;
+                document.getElementById('role').value = user.role.toUpperCase();
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // 1. Xử lý Cập nhật thông tin
+        document.getElementById('profileForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('fullname').value;
+            const email = document.getElementById('email').value;
+            const msg = document.getElementById('profileMsg');
+
+            const res = await fetch(`${BASE_GATEWAY_URL}/users/users/update`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+                body: JSON.stringify({ name, email })
+            });
+
+            const data = await res.json();
+            if (res.ok) {
+                msg.textContent = '✅ ' + data.message;
+                msg.className = 'msg success';
+            } else {
+                msg.textContent = '❌ ' + data.message;
+                msg.className = 'msg error';
+            }
+        });
+
+        // 2. Xử lý Đổi mật khẩu
+        document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const old_password = document.getElementById('oldPass').value;
+            const new_password = document.getElementById('newPass').value;
+            const msg = document.getElementById('passMsg');
+
+            const res = await fetch(`${BASE_GATEWAY_URL}/users/users/change-password`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+                body: JSON.stringify({ old_password, new_password })
+            });
+
+            const data = await res.json();
+            if (res.ok) {
+                msg.textContent = '✅ ' + data.message;
+                msg.className = 'msg success';
+                document.getElementById('passwordForm').reset();
+            } else {
+                msg.textContent = '❌ ' + data.message;
+                msg.className = 'msg error';
+            }
+        });
+
+        loadProfile();
+    </script>
+</body>
+</html>

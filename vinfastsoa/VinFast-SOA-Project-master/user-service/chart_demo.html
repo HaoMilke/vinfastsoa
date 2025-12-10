@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard User Service</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 50px;
+            background-color: #f4f4f9;
+        }
+        .chart-container {
+            width: 500px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        h2 { color: #333; }
+    </style>
+</head>
+<body>
+
+    <h2>THỐNG KÊ CƠ CẤU NGƯỜI DÙNG</h2>
+
+    <div class="chart-container">
+        <canvas id="userChart"></canvas>
+    </div>
+
+    <script>
+        async function drawChart() {
+            try {
+                // 1. Gọi API từ Python User Service
+                const response = await fetch('http://127.0.0.1:5001/api/v1/reports/users/roles');
+                const result = await response.json();
+
+                // 2. Lấy dữ liệu
+                const chartData = result.data;
+
+                // 3. Vẽ biểu đồ Pie Chart
+                const ctx = document.getElementById('userChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: chartData.labels,
+                        datasets: chartData.datasets
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { position: 'bottom' }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error("Lỗi:", error);
+                alert("Lỗi! Hãy chắc chắn bạn đã chạy lệnh: python user-service/app.py");
+            }
+        }
+
+        // Chạy hàm vẽ ngay khi tải trang
+        drawChart();
+    </script>
+
+</body>
+</html>
