@@ -21,7 +21,7 @@ CARS_DATA_DEMO = [
     {
         "model_name": "VinFast VF 9", "base_price": 1499000000, 
         "description": "SUV điện hạng E, 7 chỗ. Flagship của VinFast.", 
-        "specs": json.dumps({"motor_type": "Điện", "range": "438 km", "color": "Trắng"}), 
+        "specs": json.dumps({"motor_type": "Điện", "range": "438 km", "color": "Xanh"}), 
         "image_url": "https://giaxeoto.vn/admin/upload/images/resize/640-gia-xe-Vinfast-VF9.jpg", 
         "inventory_HN": 5, "inventory_HCM": 10
     },
@@ -35,21 +35,21 @@ CARS_DATA_DEMO = [
     {
         "model_name": "VinFast VF 7", "base_price": 850000000, 
         "description": "SUV điện hạng C, phong cách Coupe, thiết kế hiện đại.", 
-        "specs": json.dumps({"motor_type": "Điện", "range": "400 km", "color": "Xanh"}),
+        "specs": json.dumps({"motor_type": "Điện", "range": "400 km", "color": "Đen Tím"}),
         "image_url": "https://giaxeoto.vn/admin/upload/images/resize/640-Vinfast-VF7-gia-xe.jpg", 
         "inventory_HN": 20, "inventory_HCM": 25
     },
     {
         "model_name": "VinFast VF 6", "base_price": 675000000, 
         "description": "SUV điện hạng B, nhỏ gọn và linh hoạt, giá dễ tiếp cận.", 
-        "specs": json.dumps({"motor_type": "Điện", "range": "399 km", "color": "Vàng"}),
+        "specs": json.dumps({"motor_type": "Điện", "range": "399 km", "color": "Tím Than"}),
         "image_url": "https://giaxeoto.vn/admin/upload/images/resize/640-Vinfast-VF6-ban-thuong-mai-gia-xe.jpg", 
         "inventory_HN": 30, "inventory_HCM": 20
     },
     {
         "model_name": "VinFast VF 5 Plus", "base_price": 458000000, 
         "description": "SUV điện hạng A, dành cho đô thị.", 
-        "specs": json.dumps({"motor_type": "Điện", "range": "326 km", "color": "Trắng"}),
+        "specs": json.dumps({"motor_type": "Điện", "range": "326 km", "color": "Xanh Ngọc"}),
         "image_url": "https://giaxeoto.vn/admin/upload/images/resize/640-Vinfast-VF5-plus-gia-xe.jpg", 
         "inventory_HN": 40, "inventory_HCM": 50
     },
@@ -70,7 +70,7 @@ CARS_DATA_DEMO = [
     {
         "model_name": "VinFast Fadil", "base_price": 425000000, 
         "description": "Hatchback hạng A, xe đô thị nhỏ gọn, tiện lợi.", 
-        "specs": json.dumps({"motor_type": "Xăng", "engine": "1.4L", "color": "Bạc"}),
+        "specs": json.dumps({"motor_type": "Xăng", "engine": "1.4L", "color": "Đỏ Cam"}),
         "image_url": "https://autopro8.mediacdn.vn/134505113543774208/2023/1/29/vinfast-fadil-23-16434695001991234174472-16749685067641882387245-1674974414975-16749744151041515512318.jpg", 
         "inventory_HN": 20, "inventory_HCM": 15
     }
