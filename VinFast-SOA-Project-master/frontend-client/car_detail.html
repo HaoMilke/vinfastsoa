@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Chi Tiết & Đặt Hàng | VinFast</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #f3f4f6; }
@@ -19,7 +20,7 @@
         <nav class="space-x-6 font-semibold text-gray-700">
             <a href="index.html" class="hover:text-blue-600 transition">Mẫu Xe</a>
             <a href="profile.html" class="hover:text-blue-600 transition">Hồ Sơ</a>
-            <span id="login-link" class="hidden"><a href="login.html" class="hover:text-blue-600">Đăng Nhập</a></span>
+            <a href="login.html" id="login-link" class="hover:text-blue-600">Đăng Nhập</a>
             <button id="logout-link" class="hidden text-red-500 hover:underline">Đăng Xuất</button>
         </nav>
     </header>
@@ -41,8 +42,7 @@
 
                 <div class="mb-8">
                     <h3 class="text-lg font-bold text-gray-800 mb-2 border-b pb-1 uppercase tracking-wider">Thông số kỹ thuật</h3>
-                    <ul id="car-specs" class="grid grid-cols-2 gap-y-2 text-sm text-gray-700 mt-3">
-                        </ul>
+                    <ul id="car-specs" class="grid grid-cols-2 gap-y-2 text-sm text-gray-700 mt-3"></ul>
                 </div>
 
                 <div class="bg-blue-50 p-6 rounded-xl border border-blue-100 shadow-sm">
@@ -58,7 +58,6 @@
                         <button id="btnOrder" class="w-full bg-vinfast text-white py-4 rounded-lg font-bold text-lg hover:bg-blue-700 transform transition active:scale-95 shadow-md">
                             XÁC NHẬN ĐẶT CỌC NGAY
                         </button>
-                        <p id="order-msg" class="text-center text-sm font-medium"></p>
                     </div>
                 </div>
             </div>
@@ -72,30 +71,28 @@
 
         async function loadDetail() {
             if (!carId) {
-                alert("Thiếu ID mẫu xe!");
-                window.location.href = 'index.html';
+                Swal.fire('Lỗi', 'Không tìm thấy ID mẫu xe!', 'error').then(() => {
+                    window.location.href = 'index.html';
+                });
                 return;
             }
 
             try {
-                // Gọi qua Gateway (T2)
                 const res = await fetch(`${BASE_GATEWAY_URL}/catalog/catalog/cars/${carId}`);
                 if (!res.ok) throw new Error("Không thể tải thông tin xe");
                 const car = await res.json();
 
-                // 1. Cập nhật Text
                 document.getElementById('car-name').textContent = car.model_name;
                 document.getElementById('car-price').textContent = car.base_price.toLocaleString('vi-VN') + " VND";
                 document.getElementById('car-desc').textContent = car.description;
 
-                // 2. Xử lý ảnh
                 const imgBox = document.getElementById('car-image-box');
                 imgBox.innerHTML = `<img src="${car.image_url}" class="w-full h-full object-cover transition duration-500 hover:scale-105" alt="${car.model_name}">`;
 
-                // 3. Xử lý Specs (Tách key/value đẹp hơn)
                 const specsUl = document.getElementById('car-specs');
                 specsUl.innerHTML = "";
-                for (const [key, value] of Object.entries(car.specs)) {
+                const specsObj = typeof car.specs === 'string' ? JSON.parse(car.specs) : car.specs;
+                for (const [key, value] of Object.entries(specsObj)) {
                     specsUl.innerHTML += `
                         <li class="flex flex-col pb-2">
                             <span class="text-xs text-gray-400 uppercase italic">${key}</span>
@@ -104,51 +101,59 @@
                 }
             } catch (err) {
                 console.error(err);
-                alert("Lỗi tải chi tiết xe!");
+                Swal.fire('Thất bại', 'Lỗi tải dữ liệu xe!', 'error');
             }
         }
 
-        // XỬ LÝ ĐẶT HÀNG
+        // XỬ LÝ ĐẶT HÀNG (Saga & UX mới - Ý 2 & 3)
         document.getElementById('btnOrder').addEventListener('click', async () => {
             const token = localStorage.getItem('jwt_token');
-            const userId = localStorage.getItem('user_id');
-            const msg = document.getElementById('order-msg');
+            const carName = document.getElementById('car-name').textContent;
             const quantity = parseInt(document.getElementById('order-quantity').value);
 
-            if (!token || !userId) {
-                alert("Vui lòng đăng nhập để đặt cọc!");
-                window.location.href = 'login.html';
+            if (!token) {
+                Swal.fire('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để thực hiện đặt cọc mẫu xe này.', 'info')
+                    .then(() => window.location.href = 'login.html');
                 return;
             }
 
-            msg.className = "text-center text-sm font-medium text-blue-600 italic";
-            msg.textContent = "Đang xử lý giao dịch...";
+            // Hiển thị hiệu ứng Loading (Ý 3)
+            Swal.fire({
+                title: 'Đang xử lý giao dịch...',
+                text: `Hệ thống đang kiểm tra tồn kho cho mẫu ${carName}`,
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
 
             try {
+                // Gửi request lên Gateway, Gateway sẽ tự đính kèm X-User-Id (Ý 1)
                 const response = await fetch(`${BASE_GATEWAY_URL}/orders/orders`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
                     body: JSON.stringify({
-                        user_id: parseInt(userId),
                         items: [{ car_id: parseInt(carId), quantity: quantity }]
                     })
                 });
 
                 if (response.ok) {
-                    msg.className = "text-center text-sm font-medium text-green-600 italic bg-green-50 p-2 rounded mt-2";
-                    msg.textContent = "✅ ĐẶT HÀNG THÀNH CÔNG! Đang về trang chủ...";
-                    setTimeout(() => window.location.href = 'index.html', 2500);
+                    // Thông báo thành công từ Saga (Ý 2)
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Đặt cọc thành công!',
+                        text: 'Đơn hàng đã được xác nhận và trừ kho vĩnh viễn.',
+                        showConfirmButton: false,
+                        timer: 2500
+                    }).then(() => window.location.href = 'index.html');
                 } else {
                     const data = await response.json();
-                    msg.className = "text-center text-sm font-medium text-red-600 italic bg-red-50 p-2 rounded mt-2";
-                    msg.textContent = "❌ LỖI: " + (data.message || "Giao dịch thất bại");
+                    // Hiển thị lỗi cụ thể nếu hết hàng (Ý 2)
+                    Swal.fire('Giao dịch bị từ chối', data.message || 'Hết hàng trong kho', 'error');
                 }
             } catch (err) {
-                msg.textContent = "❌ Lỗi kết nối hệ thống!";
+                Swal.fire('Lỗi kết nối', 'Không thể kết nối tới hệ thống Gateway!', 'error');
             }
         });
 
-        // Khởi chạy
         loadDetail();
     </script>
 </body>

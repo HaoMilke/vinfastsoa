@@ -1,171 +1,132 @@
-# app.py
-
-from flask import Flask, request, jsonify, Response
+# order-service/app.py
+from flask import Flask, request, jsonify
 from database import db, Order, OrderItem
-from datetime import datetime
 import os
 import requests 
-from flask_cors import CORS # ĐÃ THÊM
+from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app) # KÍCH HOẠT CORS CHO PHÉP FRONTEND TRUY CẬP
+CORS(app)
 
-# Cấu hình Flask và DB (sử dụng cổng 5003)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///order_service.db' 
+# Cấu hình Flask và DB
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL", "sqlite:///order_service.db")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 
-# --- KHAI BÁO ENDPOINT CÁC DỊCH VỤ KHÁC ---
-USER_SERVICE_URL = os.environ.get("USER_SERVICE_URL", "http://127.0.0.1:5001")
-CATALOG_SERVICE_URL = os.environ.get("CATALOG_SERVICE_URL", "http://127.0.0.1:5002")
+# FIX: Sử dụng tên service "catalog" để khớp với docker-compose networks
+CATALOG_SERVICE_URL = os.environ.get("CATALOG_SERVICE_URL", "http://catalog:5002/api/v1")
 
 def initialize_db():
-    """Tạo DB khi khởi động."""
+    """Khởi tạo cơ sở dữ liệu."""
     with app.app_context():
-        db_path = 'order_service.db'
-    
         db.create_all()
-        print("Đã khởi tạo DB Đơn hàng thành công.")
 
 @app.before_request
 def setup_data():
-    """Khởi tạo DB chỉ một lần khi server khởi động."""
+    """Đảm bảo DB được tạo khi nhận request đầu tiên."""
     if not hasattr(app, 'db_initialized'):
         initialize_db()
         app.db_initialized = True
 
-# --- HÀM HỖ TRỢ TÍCH HỢP DỊCH VỤ ---
-
-def check_user_exists(user_id):
-    """Gọi User Service (T1) để kiểm tra người dùng."""
-    try:
-        response = requests.get(f"{USER_SERVICE_URL}/api/v1/users/{user_id}")
-        return response.status_code == 200
-    except requests.exceptions.ConnectionError:
-        print("Lỗi kết nối T1: Đảm bảo User Service đang chạy!")
-        return False
-
-def get_car_info_and_check_inventory(car_id, quantity):
-    """
-    Gọi Catalog Service (T2) để lấy giá và kiểm tra tồn kho.
-    """
-    try:
-        # 1. Kiểm tra tồn kho
-        inventory_check = requests.post(
-            f"{CATALOG_SERVICE_URL}/api/v1/inventory/check",
-            json={"car_id": car_id, "quantity": quantity}
-        )
-        if inventory_check.status_code != 200:
-            return None, False
-
-        inventory_data = inventory_check.json()
-        is_available = inventory_data.get('is_available', False)
-
-        if not is_available:
-            return None, False
-
-        # 2. Lấy chi tiết xe để lấy giá
-        car_details = requests.get(f"{CATALOG_SERVICE_URL}/api/v1/catalog/cars/{car_id}")
-        
-        if car_details.status_code != 200:
-            return None, False 
-
-        base_price = car_details.json().get('base_price')
-        
-        return base_price, is_available
-        
-    except requests.exceptions.ConnectionError:
-        print("Lỗi kết nối T2: Đảm bảo Catalog Service đang chạy!")
-        return None, False
-
-# --- API ENDPOINTS ---
-
+# --- API 1: TẠO ĐƠN HÀNG (Trạng thái ban đầu: Pending) ---
 @app.route('/api/v1/orders', methods=['POST'])
 def create_order():
-    """Tạo đơn hàng mới (Tích hợp T1 và T2)."""
-    
     data = request.json
+    user_id_raw = request.headers.get('X-User-Id')
     
-    # SỬA LỖI 400: Kiểm tra an toàn và xử lý chuyển đổi kiểu dữ liệu
-    if data is None:
-        return jsonify({"message": "Thiếu dữ liệu JSON. Kiểm tra Content-Type!"}), 400
-        
-    user_id_raw = data.get('user_id')
-    items = data.get('items', [])
+    if not user_id_raw:
+        return jsonify({"message": "Yêu cầu phải qua Gateway"}), 401
     
-    # Ép kiểu user_id và kiểm tra tính hợp lệ
     try:
         user_id = int(user_id_raw)
-    except (ValueError, TypeError):
-        return jsonify({"message": "User ID phải là số nguyên hợp lệ."}), 400
-    
-    if not items or not isinstance(items, list):
-        return jsonify({"message": "Thiếu chi tiết mặt hàng hoặc định dạng không hợp lệ."}), 400
-
-
-    # 1. KIỂM TRA NGƯỜI DÙNG TỒN TẠI (GỌI T1)
-    if not check_user_exists(user_id):
-        return jsonify({"message": "Người dùng không hợp lệ (ID không tồn tại trong User Service)"}), 404
-
-    new_order = Order(user_id=user_id, status='Pending', total_amount=0)
-    db.session.add(new_order)
-    
-    calculated_total = 0
-    
-    # 2. KIỂM TRA TỒN KHO VÀ GIÁ (GỌI T2)
-    for item_data in items:
-        # Ép kiểu an toàn cho car_id và quantity
-        try:
-            car_id = int(item_data.get('car_id'))
-            quantity = int(item_data.get('quantity', 1))
-        except (ValueError, TypeError):
-             db.session.rollback()
-             return jsonify({"message": "ID xe và số lượng phải là số nguyên."}), 400
-
-        base_price, is_available = get_car_info_and_check_inventory(car_id, quantity)
+        items = data.get('items', [])
         
-        if not is_available:
-            # Hủy giao dịch nếu hết hàng
-            db.session.rollback()
-            return jsonify({"message": f"Mẫu xe ID {car_id} không đủ tồn kho hoặc không tồn tại."}), 409 # Conflict
+        # Bước 1 trong workflow: Tạo đơn với trạng thái Pending
+        new_order = Order(user_id=user_id, status='Pending', total_amount=0)
+        db.session.add(new_order)
+        db.session.flush() # Để lấy được new_order.id
 
-        # Thêm Item vào đơn hàng
-        subtotal = base_price * quantity
-        calculated_total += subtotal
+        total_confirmed_amount = 0
+        for item_data in items:
+            car_id = item_data.get('car_id')
+            qty = item_data.get('quantity', 1)
+
+            # Gọi Catalog Service thực hiện Saga (trừ kho) sử dụng URL nội bộ Docker
+            try:
+                response = requests.post(
+                    f"{CATALOG_SERVICE_URL}/inventory/reduce",
+                    json={"car_id": car_id, "quantity": qty},
+                    timeout=5
+                )
+                
+                if response.status_code != 200:
+                    error_info = response.json().get('message', 'Hết hàng hoặc lỗi Catalog')
+                    db.session.rollback()
+                    return jsonify({"message": f"Thất bại: {error_info}"}), 400
+
+                res_data = response.json()
+                unit_price = res_data.get('unit_price', 0)
+                total_confirmed_amount += unit_price * qty
+                
+                db.session.add(OrderItem(
+                    order_id=new_order.id, 
+                    car_model_id=car_id, 
+                    quantity=qty, 
+                    unit_price=unit_price
+                ))
+            except requests.exceptions.RequestException as e:
+                db.session.rollback()
+                return jsonify({"message": f"Lỗi kết nối Catalog Service: {str(e)}"}), 503
+
+        new_order.total_amount = total_confirmed_amount
+        db.session.commit()
         
-        order_item = OrderItem(
-            order=new_order,
-            car_model_id=car_id,
-            quantity=quantity,
-            unit_price=base_price
-        )
-        db.session.add(order_item)
+        # Trả về dữ liệu đầy đủ bao gồm ID để Frontend không bị undefined
+        return jsonify(new_order.to_dict()), 201
 
-    # 3. HOÀN TẤT VÀ LƯU ĐƠN HÀNG
-    new_order.total_amount = calculated_total
-    new_order.status = 'Confirmed'
-    db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": f"Lỗi xử lý đơn hàng: {str(e)}"}), 500
 
-    return jsonify(new_order.to_dict()), 201 # Created
-
-@app.route('/api/v1/orders/<int:order_id>', methods=['GET'])
-def get_order_details(order_id):
-    """Lấy chi tiết đơn hàng theo ID."""
+# --- API 2: XÁC NHẬN THANH TOÁN (Chuyển sang trạng thái Paid) ---
+@app.route('/api/v1/orders/<int:order_id>/pay', methods=['PUT'])
+def process_payment(order_id):
     order = Order.query.get(order_id)
-    if order:
-        return jsonify(order.to_dict()), 200
-    return jsonify({"message": "Đơn hàng không tồn tại"}), 404
+    if not order:
+        return jsonify({"message": "Không tìm thấy đơn hàng"}), 404
+    
+    order.status = 'Paid'
+    db.session.commit()
+    return jsonify({
+        "message": "Thanh toán thành công", 
+        "status": "Paid",
+        "order_id": order.id
+    }), 200
 
+# --- API 3: ADMIN HẸN LỊCH (Chuyển sang trạng thái Scheduled) ---
+@app.route('/api/v1/orders/<int:order_id>/confirm', methods=['PUT'])
+def confirm_order(order_id):
+    role = request.headers.get('X-User-Role')
+    if role != 'admin':
+        return jsonify({"message": "Chỉ Admin mới có quyền thực hiện"}), 403
+
+    order = Order.query.get(order_id)
+    if not order:
+        return jsonify({"message": "Không tìm thấy đơn hàng"}), 404
+    
+    order.status = 'Scheduled' 
+    db.session.commit()
+    return jsonify({"message": "Đã xác nhận lịch hẹn thành công", "status": "Scheduled"}), 200
+
+# --- API 4: LẤY DANH SÁCH ĐƠN HÀNG (Dành cho Dashboard) ---
 @app.route('/api/v1/orders', methods=['GET'])
 def get_all_orders():
-    """API để Frontend (T4) lấy tất cả đơn hàng."""
-    orders = Order.query.all()
-    return jsonify([order.to_dict() for order in orders]), 200
+    try:
+        orders = Order.query.all()
+        return jsonify([order.to_dict() for order in orders]), 200
+    except Exception as e:
+        return jsonify({"message": f"Lỗi lấy dữ liệu: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    # Khởi tạo DB khi chạy ứng dụng
-    with app.app_context():
-        initialize_db()
-        
-    print("Order Service đang khởi động trên cổng 5003...")
-app.run(host='0.0.0.0', port=5003, debug=True)
+    initialize_db()
+    app.run(host='0.0.0.0', port=5003)

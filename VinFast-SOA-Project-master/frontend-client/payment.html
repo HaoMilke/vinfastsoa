@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Thanh toán Đặt cọc VinFast</title>
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .payment-container { max-width: 500px; width: 90%; padding: 40px; background: white; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); }
+        
+        .vin-logo-text { text-align: center; color: #1464F4; font-weight: bold; font-size: 24px; margin-bottom: 10px; display: block; }
+        .payment-title { text-align: center; color: #333; margin-bottom: 30px; font-size: 1.5rem; }
+
+        .order-summary { background: #f8faff; padding: 20px; border-radius: 12px; margin-bottom: 30px; border-left: 6px solid #1464F4; }
+        .order-summary p { margin: 8px 0; color: #555; font-size: 0.95rem; }
+        .amount-highlight { color: #1464F4; font-size: 1.3rem; font-weight: bold; }
+
+        .payment-methods { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+        .method-card { display: flex; align-items: center; border: 2px solid #eee; padding: 15px 20px; border-radius: 12px; cursor: pointer; transition: all 0.3s ease; }
+        .method-card:hover { border-color: #1464F4; background: #f0f5ff; }
+        .method-card.active { border-color: #1464F4; background: #f0f5ff; box-shadow: 0 4px 12px rgba(20,100,244,0.15); }
+        
+        .method-card img { width: 40px; height: 40px; margin-right: 20px; object-fit: contain; }
+        .method-card span { font-weight: 600; color: #444; }
+
+        .btn-pay { width: 100%; padding: 16px; background: #1464F4; color: white; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 30px; transition: background 0.3s; }
+        .btn-pay:hover { background: #0b4ec2; }
+        .btn-cancel { display: block; text-align: center; margin-top: 15px; color: #888; text-decoration: none; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="payment-container">
+        <span class="vin-logo-text">VINFAST</span>
+        <h2 class="payment-title">Xác nhận thanh toán đặt cọc</h2>
+        
+        <div class="order-summary" id="orderSummary">
+            <p><strong>Mã đơn hàng:</strong> <span id="summaryOrderId">Đang tải...</span></p>
+            <p><strong>Số tiền cần thanh toán:</strong></p>
+            <p class="amount-highlight" id="summaryAmount">0 VND</p>
+        </div>
+
+        <h3 style="font-size: 1.1rem; color: #333;">Chọn phương thức thanh toán</h3>
+        <div class="payment-methods">
+            <div class="method-card active" onclick="selectMethod('vinpay', this)">
+                <img src="https://img.icons8.com/color/96/wallet.png" alt="VinPay">
+                <span>Ví điện tử VinPay</span>
+            </div>
+            <div class="method-card" onclick="selectMethod('bank', this)">
+                <img src="https://img.icons8.com/color/96/bank-building.png" alt="Bank">
+                <span>Thẻ Ngân hàng nội địa (ATM)</span>
+            </div>
+        </div>
+
+        <button class="btn-pay" onclick="processPayment()">XÁC NHẬN THANH TOÁN</button>
+        <a href="index.html" class="btn-cancel">Quay lại trang chủ</a>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        let selectedMethod = 'vinpay'; // Mặc định chọn VinPay
+        const urlParams = new URLSearchParams(window.location.search);
+        const orderId = urlParams.get('orderId');
+        const amount = urlParams.get('amount');
+
+        // Hiển thị thông tin từ URL
+        if (orderId && amount) {
+            document.getElementById('summaryOrderId').textContent = `#${orderId}`;
+            document.getElementById('summaryAmount').textContent = parseInt(amount).toLocaleString('vi-VN') + " VND";
+        } else {
+            alert("Thông tin đơn hàng không hợp lệ!");
+            window.location.href = 'index.html';
+        }
+
+        function selectMethod(method, element) {
+            selectedMethod = method;
+            document.querySelectorAll('.method-card').forEach(card => card.classList.remove('active'));
+            element.classList.add('active');
+        }
+
+        async function processPayment() {
+            if (!selectedMethod) {
+                alert("Vui lòng chọn phương thức thanh toán!");
+                return;
+            }
+
+            // Hiệu ứng loading nút bấm
+            const payBtn = document.querySelector('.btn-pay');
+            payBtn.textContent = "Đang xử lý...";
+            payBtn.disabled = true;
+
+            try {
+                // Gọi API Gateway để cập nhật trạng thái đơn hàng sang "Paid"
+                const response = await fetch(`${BASE_GATEWAY_URL}/orders/orders/${orderId}/pay`, {
+                    method: 'PUT',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        ...getAuthHeader() // Lấy JWT từ script.js
+                    },
+                    body: JSON.stringify({ 
+                        method: selectedMethod,
+                        timestamp: new Date().toISOString()
+                    })
+                });
+
+                if (response.ok) {
+                    alert("Thanh toán thành công! VinFast đã nhận được tiền đặt cọc của bạn.");
+                    // Chuyển hướng sang hồ sơ để khách hàng thấy nút "Chat" sau khi Admin xác nhận
+                    window.location.href = 'profile.html';
+                } else {
+                    const errorData = await response.json();
+                    alert("Lỗi thanh toán: " + (errorData.message || "Không thể xử lý giao dịch."));
+                    payBtn.textContent = "XÁC NHẬN THANH TOÁN";
+                    payBtn.disabled = false;
+                }
+            } catch (error) {
+                console.error("Payment error:", error);
+                alert("Không thể kết nối tới máy chủ thanh toán.");
+                payBtn.textContent = "XÁC NHẬN THANH TOÁN";
+                payBtn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

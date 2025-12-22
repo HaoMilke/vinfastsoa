@@ -101,6 +101,7 @@
 
         button:hover { background-color: #0b4ec2; }
         button:active { transform: scale(0.98); }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
 
         .message { margin-top: 15px; font-size: 14px; min-height: 20px; font-weight: 500; }
         .message.success { color: #28a745; }
@@ -121,6 +122,8 @@
     <div class="auth-container">
         <div class="logo">VinFast System</div>
         <p class="subtitle">Đăng nhập để truy cập hệ thống</p>
+
+        <p id="login-msg" class="message"></p>
 
         <form id="loginForm">
             <div class="form-group">
@@ -146,9 +149,9 @@
         <a href="index.html" class="back-home">← Quay về Trang chủ</a>
     </div>
 
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="script.js"></script>
     <script>
-        // Logic xử lý form (giữ nguyên logic của bạn, chỉ thay đổi giao diện HTML)
         const loginForm = document.getElementById('loginForm');
         const btnSubmit = document.getElementById('btnSubmit');
         const btnText = document.getElementById('btnText');
@@ -160,55 +163,18 @@
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
 
+            // Vô hiệu hóa nút và cập nhật trạng thái giao diện
             btnSubmit.disabled = true;
             btnText.textContent = 'Đang xử lý...';
             msg.textContent = '';
             msg.className = 'message';
 
-            try {
-                // Gọi API Gateway (T4)
-                const response = await fetch(`${BASE_GATEWAY_URL}/users/users/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
-                });
+            // Gọi hàm handleLogin từ script.js để xử lý API và Redirect
+            await handleLogin(email, password);
 
-                const data = await response.json();
-
-                if (response.ok) {
-                    msg.textContent = '✅ Đăng nhập thành công!';
-                    msg.className = 'message success';
-                    
-                    // Lưu Token
-                    saveToken(data.token);
-                    
-                    // Lấy User ID để kiểm tra Role (Logic phụ trợ)
-                    const userId = getUserIdFromToken(data.token);
-                    if (userId) {
-                        localStorage.setItem('user_id', userId);
-                    }
-
-                    setTimeout(() => {
-                        // Nếu là admin thì vào trang admin, ngược lại về trang chủ
-                        if (email.includes('admin')) {
-                            window.location.href = 'admin.html';
-                        } else {
-                            window.location.href = 'index.html';
-                        }
-                    }, 1000);
-                } else {
-                    msg.textContent = `❌ ${data.message}`;
-                    msg.className = 'message error';
-                    btnSubmit.disabled = false;
-                    btnText.textContent = 'Đăng nhập';
-                }
-            } catch (error) {
-                console.error(error);
-                msg.textContent = '❌ Lỗi kết nối đến Server!';
-                msg.className = 'message error';
-                btnSubmit.disabled = false;
-                btnText.textContent = 'Đăng nhập';
-            }
+            // Nếu Redirect không xảy ra (lỗi đăng nhập), mở lại nút bấm
+            btnSubmit.disabled = false;
+            btnText.textContent = 'Đăng Nhập';
         });
     </script>
 </body>

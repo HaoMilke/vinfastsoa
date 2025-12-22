@@ -2,146 +2,140 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Hồ Sơ Của Tôi | VinFast</title>
+    <title>Hồ Sơ & Đơn Hàng | VinFast</title>
     <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f4f9; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; }
-        .container { width: 100%; max-width: 800px; margin-top: 50px; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f4f9; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; padding-bottom: 50px; }
+        .container { width: 100%; max-width: 900px; margin-top: 30px; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
         h1 { color: #1464F4; text-align: center; margin-bottom: 30px; }
         .section { margin-bottom: 40px; padding-bottom: 20px; border-bottom: 1px solid #eee; }
-        .section:last-child { border-bottom: none; }
-        h2 { font-size: 18px; color: #333; margin-bottom: 15px; }
+        h2 { font-size: 20px; color: #333; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
         
+        /* Form Styles */
         .form-group { margin-bottom: 15px; }
         label { display: block; margin-bottom: 5px; font-weight: 600; color: #555; }
-        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
-        input:disabled { background-color: #eee; color: #888; }
+        input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        input:disabled { background-color: #f9f9f9; color: #888; }
 
-        button { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; transition: 0.3s; }
-        .btn-save { background-color: #1464F4; }
-        .btn-save:hover { background-color: #0b4ec2; }
-        .btn-danger { background-color: #dc3545; }
-        .btn-back { background-color: #6c757d; text-decoration: none; display: inline-block; text-align: center; }
+        button { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .btn-save { background-color: #1464F4; color: white; }
+        .btn-chat { background-color: #28a745; color: white; font-size: 0.85em; }
         
-        .msg { margin-top: 10px; font-size: 14px; }
-        .success { color: green; }
-        .error { color: red; }
+        /* Order Table Styles */
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { text-align: left; background: #f8f9fa; padding: 12px; color: #666; font-size: 0.9em; }
+        td { padding: 15px 12px; border-bottom: 1px solid #eee; font-size: 0.95em; }
+        .status-tag { padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 0.85em; }
+        .Paid { background: #e3f2fd; color: #1976d2; }
+        .Scheduled { background: #e8f5e9; color: #2e7d32; }
+
+        /* Chatbox Style */
+        .chat-fixed { position: fixed; bottom: 20px; right: 20px; width: 350px; height: 450px; background: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); display: none; flex-direction: column; z-index: 1000; }
+        .chat-header { background: #1464F4; color: white; padding: 15px; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center; }
+        .chat-messages { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #f8fafc; }
+        .msg { padding: 10px; border-radius: 12px; font-size: 14px; max-width: 80%; line-height: 1.4; }
+        .msg-admin { align-self: flex-start; background: #e2e8f0; color: #1e293b; }
+        .msg-customer { align-self: flex-end; background: #1464F4; color: white; }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h1>Quản Lý Hồ Sơ</h1>
+        <h1>Trung Tâm Khách Hàng VinFast</h1>
 
         <div class="section">
-            <h2>👤 Thông tin cá nhân</h2>
+            <h2>👤 Thông tin tài khoản</h2>
             <form id="profileForm">
-                <div class="form-group">
-                    <label>Họ và Tên</label>
-                    <input type="text" id="fullname" required>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div class="form-group">
+                        <label>Họ và Tên</label>
+                        <input type="text" id="fullname" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email liên hệ</label>
+                        <input type="email" id="email" required>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Email (Dùng để đăng nhập)</label>
-                    <input type="email" id="email" required>
-                </div>
-                <div class="form-group">
-                    <label>Vai trò</label>
-                    <input type="text" id="role" disabled>
-                </div>
-                <button type="submit" class="btn-save">Lưu Thay Đổi</button>
-                <p id="profileMsg" class="msg"></p>
+                <button type="submit" class="btn-save">Cập nhật thông tin</button>
+                <p id="profileMsg"></p>
             </form>
         </div>
 
         <div class="section">
-            <h2>🔒 Đổi Mật Khẩu</h2>
-            <form id="passwordForm">
-                <div class="form-group">
-                    <label>Mật khẩu cũ</label>
-                    <input type="password" id="oldPass" required placeholder="Nhập mật khẩu hiện tại">
-                </div>
-                <div class="form-group">
-                    <label>Mật khẩu mới</label>
-                    <input type="password" id="newPass" required placeholder="Nhập mật khẩu mới">
-                </div>
-                <button type="submit" class="btn-danger">Đổi Mật Khẩu</button>
-                <p id="passMsg" class="msg"></p>
-            </form>
+            <h2>📦 Đơn hàng & Lịch hẹn</h2>
+            <table id="user-orders-table">
+                <thead>
+                    <tr>
+                        <th>Mã Đơn</th>
+                        <th>Sản phẩm</th>
+                        <th>Trạng thái</th>
+                        <th>Hành động</th>
+                    </tr>
+                </thead>
+                <tbody id="user-orders-body">
+                    <tr><td colspan="4" style="text-align:center">Đang tải lịch sử đơn hàng...</td></tr>
+                </tbody>
+            </table>
         </div>
 
         <div style="text-align: center;">
-            <a href="index.html" class="btn-back" style="padding: 10px 20px; color: white; border-radius: 6px;">← Quay về Trang chủ</a>
+            <a href="index.html" style="color: #666; text-decoration: none; font-weight: 600;">← Quay về Trang chủ</a>
+        </div>
+    </div>
+
+    <div id="chatWrapper" class="chat-fixed">
+        <div class="chat-header">
+            <span class="font-bold">💬 Hỗ trợ VinFast</span>
+            <button onclick="closeChat()" style="background:none; border:none; color:white; font-size:20px; cursor:pointer;">&times;</button>
+        </div>
+        <div id="chatMessages" class="chat-messages">
+            </div>
+        <div style="padding: 12px; border-top: 1px solid #eee; display: flex; gap: 8px;">
+            <input type="text" id="chatInput" style="flex:1; border: 1px solid #ddd; padding: 8px; border-radius: 6px;" placeholder="Nhập tin nhắn...">
+            <button onclick="sendChatMessage()" style="background:#1464F4; color:white; padding:8px 15px; border:none; border-radius:6px;">Gửi</button>
         </div>
     </div>
 
     <script src="script.js"></script>
     <script>
-        // Logic riêng cho trang Profile
-        async function loadProfile() {
-            const userId = localStorage.getItem('user_id');
-            if (!userId) window.location.href = 'login.html';
+        // Tự động load dữ liệu khi vào trang
+        document.addEventListener('DOMContentLoaded', () => {
+            loadProfile();    // Hàm từ code cũ của bạn
+            loadUserOrders(); // Hàm mới để lấy danh sách đơn hàng
+        });
 
-            // Gọi API lấy thông tin cũ để điền vào form
+        async function loadUserOrders() {
+            const userId = localStorage.getItem('user_id');
+            const tbody = document.getElementById('user-orders-body');
+            
             try {
-                const response = await fetch(`${BASE_GATEWAY_URL}/users/users/${userId}`);
-                const user = await response.json();
+                // Gọi qua Gateway tới Order Service
+                const response = await fetch(`${BASE_GATEWAY_URL}/orders/user/${userId}`, {
+                    headers: getAuthHeader()
+                });
+                const orders = await response.json();
                 
-                document.getElementById('fullname').value = user.name;
-                document.getElementById('email').value = user.email;
-                document.getElementById('role').value = user.role.toUpperCase();
+                tbody.innerHTML = '';
+                orders.forEach(order => {
+                    // Chỉ hiện nút Chat nếu đã thanh toán hoặc đã hẹn lịch
+                    const showChatBtn = (order.status === 'Paid' || order.status === 'Scheduled');
+                    
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>#${order.id}</td>
+                            <td><strong>${order.car_model || 'VinFast Car'}</strong></td>
+                            <td><span class="status-tag ${order.status}">${order.status}</span></td>
+                            <td>
+                                ${showChatBtn ? `<button class="btn-chat" onclick="openChat(${order.id}, 'Hệ thống VinFast')">💬 Nhắn tin</button>` : '---'}
+                            </td>
+                        </tr>
+                    `;
+                });
             } catch (e) {
-                console.error(e);
+                tbody.innerHTML = '<tr><td colspan="4">Không có dữ liệu đơn hàng.</td></tr>';
             }
         }
-
-        // 1. Xử lý Cập nhật thông tin
-        document.getElementById('profileForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const name = document.getElementById('fullname').value;
-            const email = document.getElementById('email').value;
-            const msg = document.getElementById('profileMsg');
-
-            const res = await fetch(`${BASE_GATEWAY_URL}/users/users/update`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-                body: JSON.stringify({ name, email })
-            });
-
-            const data = await res.json();
-            if (res.ok) {
-                msg.textContent = '✅ ' + data.message;
-                msg.className = 'msg success';
-            } else {
-                msg.textContent = '❌ ' + data.message;
-                msg.className = 'msg error';
-            }
-        });
-
-        // 2. Xử lý Đổi mật khẩu
-        document.getElementById('passwordForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const old_password = document.getElementById('oldPass').value;
-            const new_password = document.getElementById('newPass').value;
-            const msg = document.getElementById('passMsg');
-
-            const res = await fetch(`${BASE_GATEWAY_URL}/users/users/change-password`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-                body: JSON.stringify({ old_password, new_password })
-            });
-
-            const data = await res.json();
-            if (res.ok) {
-                msg.textContent = '✅ ' + data.message;
-                msg.className = 'msg success';
-                document.getElementById('passwordForm').reset();
-            } else {
-                msg.textContent = '❌ ' + data.message;
-                msg.className = 'msg error';
-            }
-        });
-
-        loadProfile();
     </script>
 </body>
 </html>

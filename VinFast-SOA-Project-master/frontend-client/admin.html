@@ -5,39 +5,44 @@
     <title>Admin Dashboard Quản Lý Đơn Hàng (L2)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f7f9; }
         .card { background-color: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); }
         .chart-container { position: relative; height: 350px; max-height: 400px; width: 100%; padding: 10px; }
-        .status { display: inline-block; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 0.9em; }
-        .Confirmed { background-color: #d4edda; color: #155724; }
+        .status { display: inline-block; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 0.85em; }
+        .Paid { background-color: #d1fae5; color: #065f46; } /* Màu xanh cho đơn đã trả tiền */
+        .Scheduled { background-color: #dbeafe; color: #1e40af; } /* Màu xanh dương cho đơn đã hẹn */
         .Pending { background-color: #fff3cd; color: #856404; }
-        .Canceled { background-color: #f8d7da; color: #721c24; }
-        .table-header { background-color: #e5e7eb; }
+        
+        /* Chatbox Style */
+        .chat-fixed { position: fixed; bottom: 20px; right: 20px; width: 350px; height: 450px; background: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); display: none; flex-direction: column; z-index: 1000; overflow: hidden; }
+        .chat-header { background: #1464F4; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .chat-messages { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #f8fafc; }
+        .msg { padding: 8px 12px; border-radius: 12px; font-size: 14px; max-width: 80%; }
+        .msg-admin { align-self: flex-end; background: #1464F4; color: white; }
+        .msg-customer { align-self: flex-start; background: #e2e8f0; color: #1e293b; }
     </style>
 </head>
 <body>
     <div class="max-w-7xl mx-auto py-10 px-4">
-        <h1 class="text-3xl font-bold text-gray-800 mb-8">Dashboard Admin (L2) - Phân tích SOA</h1>
-        <p class="mb-6 text-gray-600">
-            Trang này hiển thị dữ liệu đã được ghép nối (Mashup) từ T1, T2, T3 và sử dụng Chart.js để biểu đồ hóa số liệu (Cấp độ 4).
-        </p>
-
+        <h1 class="text-3xl font-bold text-gray-800 mb-8">VinFast Admin - Điều phối Đơn hàng</h1>
+        
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
             <div id="revenue-card" class="card p-6 flex flex-col justify-center items-center">
-                <div class="text-lg font-semibold text-gray-500">Tổng Doanh thu Đã Xác nhận (Cấp 3)</div>
-                <div id="total-revenue" class="text-4xl font-extrabold text-green-600 mt-2">Đang tải...</div>
+                <div class="text-lg font-semibold text-gray-500">Doanh thu Đặt cọc (Paid)</div>
+                <div id="total-revenue" class="text-4xl font-extrabold text-blue-600 mt-2">Đang tải...</div>
             </div>
             
             <div class="card p-6 lg:col-span-1">
-                <h3 class="text-xl font-semibold mb-3">Tỷ lệ Trạng thái Đơn hàng (T3)</h3>
+                <h3 class="text-xl font-semibold mb-3 text-center">Trạng thái (T3)</h3>
                 <div class="chart-container">
                     <canvas id="orderStatusChart"></canvas>
                 </div>
             </div>
             
             <div class="card p-6 lg:col-span-1">
-                <h3 class="text-xl font-semibold mb-3">Phân bố Tồn kho Sản phẩm (T2)</h3>
+                <h3 class="text-xl font-semibold mb-3 text-center">Tồn kho (T2)</h3>
                 <div class="chart-container">
                     <canvas id="inventoryChart"></canvas>
                 </div>
@@ -45,28 +50,73 @@
         </div>
 
         <div class="card p-6">
-            <h3 class="text-xl font-semibold mb-4">Danh sách Đơn hàng (Mashup T1, T2, T3)</h3>
-            <p id="status-message" class="text-red-500 mb-4"></p>
+            <h3 class="text-xl font-semibold mb-4">Quản lý Đặt cọc & Lịch hẹn</h3>
             <table class="min-w-full divide-y divide-gray-200">
-                <thead class="table-header">
+                <thead class="bg-gray-50">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID Đơn hàng</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Khách Hàng (T1)</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Chi tiết Sản phẩm (T2)</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tổng Tiền</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Khách Hàng</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sản Phẩm</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Số Tiền</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trạng Thái</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hành Động</th>
                     </tr>
                 </thead>
                 <tbody id="orders-table-body" class="bg-white divide-y divide-gray-200">
-                    <tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">Đang tải dữ liệu...</td></tr>
+                    <tr><td colspan="6" class="px-6 py-4 text-center">Đang tải dữ liệu...</td></tr>
                 </tbody>
             </table>
         </div>
     </div>
+
+    <div id="scheduleModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-[999] flex items-center justify-center">
+        <div class="bg-white p-8 rounded-xl w-[450px] shadow-2xl">
+            <h3 class="text-xl font-bold text-blue-700 mb-4">📅 Thiết lập Lịch hẹn</h3>
+            <hr class="mb-4">
+            <input type="hidden" id="currentOrderId">
+            <input type="hidden" id="currentUserId">
+            
+            <div class="mb-4">
+                <label class="block text-sm font-bold mb-1">📍 Chọn Showroom:</label>
+                <select id="showroomAddress" class="w-full p-2 border rounded-md">
+                    <option value="VinFast Smart City, Hà Nội">VinFast Smart City, Hà Nội</option>
+                    <option value="VinFast Thảo Điền, TP.HCM">VinFast Thảo Điền, TP.HCM</option>
+                    <option value="VinFast Ngô Quyền, Đà Nẵng">VinFast Ngô Quyền, Đà Nẵng</option>
+                </select>
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-bold mb-1">⏰ Thời gian hẹn:</label>
+                <input type="datetime-local" id="appointmentTime" class="w-full p-2 border rounded-md">
+            </div>
+
+            <div class="flex gap-3 mt-6">
+                <button onclick="submitSchedule()" class="flex-1 bg-blue-600 text-white py-2 rounded-md font-bold hover:bg-blue-700">Gửi Thông Báo</button>
+                <button onclick="closeModal()" class="flex-1 bg-gray-200 text-gray-700 py-2 rounded-md hover:bg-gray-300">Đóng</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="chatWrapper" class="chat-fixed">
+        <div class="chat-header">
+            <span class="font-bold">💬 Chat: <span id="chatWithUser">Khách hàng</span></span>
+            <button onclick="closeChat()" class="text-white text-xl">&times;</button>
+        </div>
+        <div id="chatMessages" class="chat-messages">
+            </div>
+        <div class="p-3 border-t flex gap-2">
+            <input type="text" id="chatInput" class="flex-1 border rounded-md p-2 text-sm" placeholder="Nhập tin nhắn...">
+            <button onclick="sendChatMessage()" class="bg-blue-600 text-white px-4 py-1 rounded-md text-sm">Gửi</button>
+        </div>
+    </div>
+
     <script src="script.js"></script>
     <script>
-        // SỬA LỖI: Gọi đúng hàm tải dữ liệu chính khi trang tải xong
         document.addEventListener('DOMContentLoaded', loadDashboard);
+
+        function closeModal() {
+            document.getElementById('scheduleModal').classList.add('hidden');
+        }
     </script>
 </body>
 </html>

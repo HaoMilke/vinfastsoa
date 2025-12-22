@@ -1,7 +1,5 @@
 flask
-flask-sqlalchemy
 flask-cors
 requests
 pyjwt
-passlib
-faker
+flask-socketio

@@ -10,13 +10,13 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app) 
 
-# Đảm bảo sử dụng tên DB mới để tránh xung đột
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///catalog_service_v3.db' 
+# Cấu hình DB
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL", "sqlite:///catalog_service_v3.db")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app) 
 
-# --- DỮ LIỆU DEMO MỚI (Giữ nguyên) ---
+# --- DỮ LIỆU DEMO (Chỉ chèn nếu DB trống) ---
 CARS_DATA_DEMO = [
     {
         "model_name": "VinFast VF 9", "base_price": 1499000000, 
@@ -76,83 +76,88 @@ CARS_DATA_DEMO = [
     }
 ]
 
-def create_demo_data(data):
-    """Tạo DB và chèn dữ liệu demo."""
-    db.create_all()
-    
-    CarModel.query.delete() 
-    Inventory.query.delete()
+def initialize_db():
+    """Tạo DB và chỉ chèn dữ liệu nếu chưa có xe nào."""
+    with app.app_context():
+        db.create_all()
+        if CarModel.query.count() == 0:
+            print("Đang tạo dữ liệu demo cho Catalog...")
+            for item in CARS_DATA_DEMO:
+                car = CarModel(
+                    model_name=item['model_name'], 
+                    base_price=item['base_price'],
+                    description=item['description'],
+                    specs=item['specs'],
+                    image_url=item['image_url']
+                )
+                db.session.add(car)
+                db.session.flush() # Lấy ID car trước khi commit
+                
+                db.session.add(Inventory(car_model_id=car.id, dealer_location="Hà Nội", stock_quantity=item['inventory_HN']))
+                db.session.add(Inventory(car_model_id=car.id, dealer_location="TP. HCM", stock_quantity=item['inventory_HCM']))
+            db.session.commit()
+            print("Đã khởi tạo dữ liệu thành công.")
 
-    for item in data:
-        car = CarModel(
-            model_name=item['model_name'], 
-            base_price=item['base_price'],
-            description=item['description'],
-            specs=item['specs'],
-            image_url=item['image_url']
-        )
-        db.session.add(car)
-        
-        db.session.commit() 
-        car_id = car.id
-        
-        db.session.add(Inventory(car_model_id=car_id, dealer_location="Hà Nội", stock_quantity=item['inventory_HN']))
-        db.session.add(Inventory(car_model_id=car_id, dealer_location="TP. HCM", stock_quantity=item['inventory_HCM']))
+@app.before_request
+def setup():
+    if not hasattr(app, 'db_initialized'):
+        initialize_db()
+        app.db_initialized = True
 
-    db.session.commit() 
-    print("Đã khởi tạo DB Danh mục & Kho với dữ liệu mới thành công.")
-
-
-# --- API ENDPOINTS (Giữ nguyên) ---
+# --- API ENDPOINTS ---
 
 @app.route('/api/v1/catalog/cars', methods=['GET'])
 def get_all_cars():
     cars = CarModel.query.all()
     data = [car.to_dict() for car in cars]
-    json_output = app.json.dumps(data, ensure_ascii=False)
-    return Response(json_output, mimetype='application/json', status=200)
+    return jsonify(data), 200
 
 @app.route('/api/v1/catalog/cars/<int:car_id>', methods=['GET'])
 def get_car_details(car_id):
     car = CarModel.query.get(car_id)
     if car:
-        data = car.to_dict()
-        json_output = app.json.dumps(data, ensure_ascii=False)
-        return Response(json_output, mimetype='application/json', status=200)
+        return jsonify(car.to_dict()), 200
     return jsonify({"message": "Mẫu xe không tồn tại"}), 404
 
-@app.route('/api/v1/inventory/check', methods=['POST'])
-def check_inventory():
+@app.route('/api/v1/inventory/reduce', methods=['POST'])
+def reduce_stock():
+    """API quan trọng phục vụ Saga Pattern từ Order Service."""
     data = request.json
     car_id = data.get('car_id')
-    required_quantity = data.get('quantity', 1)
-    
+    quantity = data.get('quantity', 1)
+
     if not car_id:
         return jsonify({"message": "Thiếu ID mẫu xe"}), 400
 
-    total_stock = db.session.query(func.sum(Inventory.stock_quantity)).filter(
-        Inventory.car_model_id == car_id
-    ).scalar() or 0
-    
-    is_available = total_stock >= required_quantity
-    
-    return jsonify({
-        "car_id": car_id,
-        "is_available": is_available,
-        "available_stock": total_stock,
-        "required": required_quantity
-    }), 200 
+    # Lấy tồn kho tổng cộng từ tất cả chi nhánh
+    inventory_items = Inventory.query.filter_by(car_model_id=car_id).all()
+    total_available = sum(item.stock_quantity for item in inventory_items)
+
+    if total_available < quantity:
+        return jsonify({"message": f"Hết hàng! Hiện chỉ còn {total_available} chiếc"}), 400
+
+    try:
+        # Thực hiện trừ kho (Ưu tiên trừ ở chi nhánh có nhiều hàng trước)
+        remaining_to_reduce = quantity
+        for item in sorted(inventory_items, key=lambda x: x.stock_quantity, reverse=True):
+            if remaining_to_reduce <= 0: break
+            
+            reduce_amount = min(item.stock_quantity, remaining_to_reduce)
+            item.stock_quantity -= reduce_amount
+            remaining_to_reduce -= reduce_amount
+
+        car = CarModel.query.get(car_id)
+        db.session.commit()
+        
+        return jsonify({
+            "message": "Trừ kho thành công",
+            "unit_price": car.base_price
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": f"Lỗi xử lý kho: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    # THỰC HIỆN XÓA FILE DB VÀ TẠO MỚI TRONG APPLICATION CONTEXT
-    with app.app_context():
-        db_path = 'catalog_service_v3.db'
-        
-    
-      
-             
-        # Tạo DB và dữ liệu mới
-        create_demo_data(CARS_DATA_DEMO)
-            
-    print("Catalog Service đang khởi động trên cổng 5002...")
-app.run(host='0.0.0.0', port=5002, debug=True)
+    initialize_db()
+    print("Catalog Service đang chạy trên cổng 5002...")
+    app.run(host='0.0.0.0', port=5002, debug=True)

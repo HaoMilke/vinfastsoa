@@ -1,72 +1,97 @@
-version: '3.8'
-
 services:
-  # 1. DỊCH VỤ NGƯỜI DÙNG (USER SERVICE - T1)
+  # 1. DỊCH VỤ NGƯỜI DÙNG
   users:
     build: ./user-service
     container_name: vinfast-users
     ports:
       - "5001:5001"
     environment:
-      # Key bí mật để tạo và giải mã JWT Token
       - JWT_SECRET_KEY=vinfast_secret_key_mac_dinh_123
     volumes:
-      # LƯU TRỮ VĨNH VIỄN DB: Ánh xạ thư mục instance ra ngoài máy thật.
       - ./user-service/instance:/app/instance
+    networks:
+      - vinfast-network
     restart: always
 
-  # 2. DỊCH VỤ DANH MỤC & TỒN KHO (CATALOG SERVICE - T2)
+  # 2. DỊCH VỤ DANH MỤC XE
   catalog:
     build: ./catalog-service
     container_name: vinfast-catalog
     ports:
       - "5002:5002"
     volumes:
-      # LƯU TRỮ VĨNH VIỄN DB: Ánh xạ thư mục instance ra ngoài máy thật.
       - ./catalog-service/instance:/app/instance
+    networks:
+      - vinfast-network
     restart: always
 
-  # 3. DỊCH VỤ ĐẶT HÀNG (ORDER SERVICE - T3)
+  # 3. DỊCH VỤ ĐƠN HÀNG
   orders:
     build: ./order-service
     container_name: vinfast-orders
     ports:
       - "5003:5003"
     environment:
-      # Khai báo URL của các dịch vụ khác (Sử dụng tên services trong Docker)
-      - USER_SERVICE_URL=http://users:5001
-      - CATALOG_SERVICE_URL=http://catalog:5002
+      - USER_SERVICE_URL=http://users:5001/api/v1
+      - CATALOG_SERVICE_URL=http://catalog:5002/api/v1
+      - CHAT_SERVICE_URL=http://chat:5005/api/v1
     volumes:
-      # LƯU TRỮ VĨNH VIỄN DB: Ánh xạ thư mục instance ra ngoài máy thật.
       - ./order-service/instance:/app/instance
     depends_on:
       - users
       - catalog
+    networks:
+      - vinfast-network
     restart: always
 
-  # 4. API GATEWAY (L1)
+  # 4. DỊCH VỤ CHAT
+  chat:
+    build: ./chat-service
+    container_name: vinfast-chat
+    ports:
+      - "5005:5005"
+    environment:
+      - DATABASE_URL=sqlite:///chat_service.db
+    volumes:
+      - ./chat-service/instance:/app/instance
+    networks:
+      - vinfast-network
+    restart: always
+
+  # 5. API GATEWAY
   gateway:
     build: ./api-gateway
     container_name: vinfast-gateway
     ports:
       - "8000:8000"
     environment:
-      # Khai báo URL của các dịch vụ để Gateway định tuyến
+      - JWT_SECRET_KEY=vinfast_secret_key_mac_dinh_123
       - USER_SERVICE_URL=http://users:5001/api/v1
       - CATALOG_SERVICE_URL=http://catalog:5002/api/v1
       - ORDER_SERVICE_URL=http://orders:5003/api/v1
+      - CHAT_SERVICE_URL=http://chat:5005/api/v1
     depends_on:
       - users
       - catalog
       - orders
+      - chat
+    networks:
+      - vinfast-network
     restart: always
 
-  # 5. FRONTEND CLIENT (L2) - Nginx
+  # 6. FRONTEND
   frontend:
     build: ./frontend-client
     container_name: vinfast-frontend
     ports:
-      - "80:80" # Truy cập: http://localhost:80
+      - "80:80"
     depends_on:
-      - gateway # Đảm bảo Gateway chạy trước
+      - gateway
+    networks:
+      - vinfast-network
     restart: always
+
+# Mạng bridge cho phép các microservices giao tiếp nội bộ
+networks:
+  vinfast-network:
+    driver: bridge

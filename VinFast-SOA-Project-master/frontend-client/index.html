@@ -11,23 +11,27 @@
         /* HEADER */
         header { background-color: white; color: #333; padding: 15px 40px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
         
-        .header-logo img { height: 35px; margin-right: 30px; }
+        .header-logo { text-decoration: none; color: #1464F4; font-size: 24px; }
+        .header-logo b { letter-spacing: 2px; }
         
         .main-menu a { color: #555; text-decoration: none; margin-right: 25px; font-weight: 600; font-size: 1em; transition: color 0.3s; }
         .main-menu a:hover { color: #1464F4; }
         
         .header-actions { display: flex; align-items: center; gap: 15px; }
         .header-actions a { text-decoration: none; font-weight: 600; font-size: 0.95em; }
-        #login-link { color: #1464F4; }
         
-        .btn-primary { 
+        /* Các nút bấm trạng thái */
+        .btn-login { color: #1464F4; }
+        .btn-primary, .btn-logout, .btn-profile { 
             background-color: #1464F4; 
             color: white !important;
             padding: 8px 20px; 
             border-radius: 20px; 
             transition: background 0.3s;
         }
+        .btn-logout { background-color: #dc3545; border: none; cursor: pointer; font-family: inherit; }
         .btn-primary:hover { background-color: #0b4ec2; }
+        .btn-logout:hover { background-color: #a71d2a; }
         
         .header-left, .header-right { display: flex; align-items: center; }
 
@@ -50,15 +54,23 @@
         
         .card-body { padding: 20px; flex-grow: 1; display: flex; flex-direction: column; }
         .car-card h2 { color: #333; font-size: 1.4em; margin: 0 0 10px 0; }
-        .price { color: #1464F4; font-size: 1.2em; font-weight: bold; margin-bottom: 10px; }
+        .price { color: #1464F4; font-size: 1.2em; font-weight: bold; margin-bottom: 5px; }
+        .deposit-info { color: #28a745; font-size: 0.95em; font-weight: 600; margin-bottom: 10px; }
         .desc { font-size: 0.9em; color: #666; margin-bottom: 20px; flex-grow: 1; line-height: 1.5; }
         
-        .car-card button { 
-            background-color: #1464F4; color: white; border: none; padding: 12px; width: 100%; 
-            border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 1em;
-            transition: background 0.2s;
+        /* NÚT BẤM */
+        .btn-group { display: flex; gap: 10px; margin-top: auto; }
+        .btn-secondary { 
+            background-color: #f0f0f0; color: #333; border: none; padding: 12px; flex: 1;
+            border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.9em; transition: 0.2s;
         }
-        .car-card button:hover { background-color: #0b4ec2; }
+        .btn-secondary:hover { background-color: #e0e0e0; }
+
+        .btn-deposit { 
+            background-color: #1464F4; color: white; border: none; padding: 12px; flex: 1.5;
+            border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 0.9em; transition: background 0.2s;
+        }
+        .btn-deposit:hover { background-color: #0b4ec2; }
 
         footer { background-color: #333; color: white; text-align: center; padding: 20px; font-size: 0.9em; margin-top: 40px; }
     </style>
@@ -67,7 +79,7 @@
     <header>
         <div class="header-left">
             <a href="index.html" class="header-logo">
-                <img src="vinfast_logo.png" alt="VinFast Logo" onerror="this.style.display='none';document.write('<b>VINFAST</b>')"> 
+                <b>VINFAST</b>
             </a>
             <nav class="main-menu">
                 <a href="index.html">Ô tô</a>
@@ -75,11 +87,11 @@
                 <a href="#">Dịch vụ</a>
             </nav>
         </div>
-        <div class="header-right">
+        
+        <div class="header-right" id="auth-group">
             <div class="header-actions">
-                <a href="login.html" id="login-link">Đăng nhập</a>
+                <a href="login.html" class="btn-login">Đăng nhập</a>
                 <a href="register.html" class="btn-primary">Đăng ký</a>
-                <a href="#" id="logout-link" style="display: none;" class="btn-primary" style="background-color: #666;">Đăng xuất</a>
             </div>
         </div>
     </header>
@@ -99,11 +111,10 @@
         <p>&copy; 2025 VinFast SOA Project. Hệ thống bán xe trực tuyến.</p>
     </footer>
 
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="script.js"></script>
     
     <script>
-        // --- LOGIC RIÊNG CỦA TRANG CHỦ (Load Xe) ---
-        // Biến lưu trữ danh sách xe để dùng cho bộ lọc tìm kiếm
         let allCars = []; 
 
         async function loadCarList() {
@@ -111,21 +122,18 @@
             carListDiv.innerHTML = '<p>Đang kết nối tới Catalog Service...</p>';
             
             try {
-                // Gọi API Gateway -> Catalog Service
-                // BASE_GATEWAY_URL được lấy từ file script.js
+                // Sử dụng BASE_GATEWAY_URL khai báo từ script.js
                 const response = await fetch(`${BASE_GATEWAY_URL}/catalog/catalog/cars`); 
-                
                 if (!response.ok) {
-                    carListDiv.innerHTML = `<p style="color:red">Lỗi tải dữ liệu (Mã: ${response.status}). Vui lòng kiểm tra Server.</p>`;
+                    carListDiv.innerHTML = `<p style="color:red">Lỗi tải dữ liệu. Vui lòng kiểm tra Server.</p>`;
                     return;
                 }
-                
                 allCars = await response.json(); 
                 displayCars(allCars); 
 
             } catch (error) {
                 console.error(error);
-                carListDiv.innerHTML = `<p style="color:red">Không thể kết nối tới Gateway (${BASE_GATEWAY_URL}). Hãy đảm bảo Docker đang chạy.</p>`;
+                carListDiv.innerHTML = `<p style="color:red">Không thể kết nối tới Gateway. Hãy đảm bảo Docker đang chạy.</p>`;
             }
         }
 
@@ -140,7 +148,7 @@
 
             carsToDisplay.forEach(car => {
                 const priceVND = car.base_price.toLocaleString('vi-VN') + ' VND';
-                // Nếu không có ảnh thì dùng ảnh placeholder
+                const depositFee = 10000000; 
                 const imageUrl = car.image_url || 'https://via.placeholder.com/400x250?text=VinFast+Image'; 
 
                 const carDiv = document.createElement('div');
@@ -150,15 +158,19 @@
                     <div class="card-body">
                         <h2>${car.model_name}</h2>
                         <div class="price">${priceVND}</div>
+                        <div class="deposit-info">🎯 Đặt cọc ngay: ${depositFee.toLocaleString('vi-VN')} VND</div>
                         <div class="desc">${car.description || 'Đang cập nhật mô tả...'}</div>
-                        <button onclick="window.location.href='car_detail.html?car_id=${car.id}'">Xem Chi Tiết & Đặt Cọc</button>
+                        <div class="btn-group">
+                            <button class="btn-secondary" onclick="window.location.href='car_detail.html?car_id=${car.id}'">Chi tiết</button>
+                            <button class="btn-deposit" onclick="handleDeposit(${car.id}, ${depositFee})">ĐẶT CỌC NGAY</button>
+                        </div>
                     </div>
                 `;
                 carListDiv.appendChild(carDiv);
             });
         }
 
-        // --- TÍNH NĂNG TÌM KIẾM ---
+        // Xử lý tìm kiếm
         document.getElementById('search-input').addEventListener('input', (event) => { 
             const searchTerm = event.target.value.toLowerCase();
             const filteredCars = allCars.filter(car => 
@@ -168,8 +180,10 @@
             displayCars(filteredCars);
         });
 
-        // Khởi chạy khi load trang
-        loadCarList();
+        // Khởi chạy khi trang tải xong
+        document.addEventListener('DOMContentLoaded', () => {
+            loadCarList();
+        });
     </script>
 </body>
 </html>

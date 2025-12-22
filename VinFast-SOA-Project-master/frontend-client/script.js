@@ -1,249 +1,364 @@
 // script.js
 
-// Cấu hình đường dẫn API Gateway (Truy cập từ trình duyệt máy ngoài vào Docker)
+// 1. CẤU HÌNH KẾT NỐI
 const BASE_GATEWAY_URL = "http://127.0.0.1:8000"; 
 
-// --- 1. CÁC HÀM XỬ LÝ TOKEN (JWT) ---
-
-function saveToken(token) {
-    // Lưu Token vào trình duyệt sau khi đăng nhập thành công
-    localStorage.setItem('jwt_token', token);
+// Khởi tạo Socket.IO với cơ chế bọc lỗi an toàn
+let socket;
+try {
+    // SỬA LỖI: Chỉ sử dụng 'websocket' và tắt 'polling' để tránh kẹt kết nối trình duyệt
+    socket = io(BASE_GATEWAY_URL, {
+        transports: ['websocket'], 
+        upgrade: false,
+        reconnection: true,
+        reconnectionAttempts: 5,
+        timeout: 10000
+    });
+} catch (e) {
+    console.error("Socket.IO không thể khởi tạo:", e);
 }
+
+// --- 2. XỬ LÝ TOKEN & XÁC THỰC ---
 
 function getAuthHeader() {
     const token = localStorage.getItem('jwt_token');
-    // Trả về Header Authorization để gửi kèm các request cần bảo mật
-    return token ? { 'Authorization': `Bearer ${token}` } : {};
+    return token ? { 
+        'Authorization': `Bearer ${token}`, 
+        'Content-Type': 'application/json' 
+    } : { 
+        'Content-Type': 'application/json' 
+    };
 }
 
-function getUserIdFromToken(token) {
-    try {
-        // Giải mã payload của JWT (Phần giữa 2 dấu chấm)
-        const payload = token.split('.')[1];
-        // atob: giải mã base64 (chỉ hoạt động trên trình duyệt)
-        const decoded = JSON.parse(atob(payload)); 
-        return decoded.user_id; 
-    } catch (e) {
-        return null;
-    }
-}
-
-// --- 2. LOGIC TỰ ĐỘNG CẬP NHẬT HEADER (Login/Logout/Profile) ---
-
-document.addEventListener("DOMContentLoaded", async function() {
-    const loginLink = document.getElementById('login-link');
-    const logoutLink = document.getElementById('logout-link');
-    const registerBtn = document.querySelector('.header-actions .btn-primary[href="register.html"]'); 
-
-    if (!loginLink) return;
+function updateHeaderUI() {
+    const authGroup = document.getElementById('auth-group');
+    if (!authGroup) return;
 
     const token = localStorage.getItem('jwt_token');
-    const userId = localStorage.getItem('user_id');
+    const role = localStorage.getItem('user_role');
 
-    if (token && userId) {
-        // --- TRẠNG THÁI: ĐÃ ĐĂNG NHẬP ---
-        if (registerBtn) registerBtn.style.display = 'none'; 
-        if (logoutLink) logoutLink.style.display = 'inline-block';
-        
-        loginLink.href = "profile.html"; 
-        loginLink.textContent = "👤 Tài khoản của tôi";
+    if (token) {
+        let actionLink = (role === 'admin') ? 
+            `<a href="admin.html" class="btn-primary">⚙️ Quản trị</a>` : 
+            `<a href="profile.html" class="btn-primary">👤 Hồ sơ</a>`;
 
-        try {
-            const res = await fetch(`${BASE_GATEWAY_URL}/users/users/${userId}`);
-            if (res.ok) {
-                const user = await res.json();
-                loginLink.textContent = `👤 Chào, ${user.name}`;
-            }
-        } catch (e) {
-            console.log("Không tải được thông tin user header");
-        }
-
-    } else {
-        // --- TRẠNG THÁI: CHƯA ĐĂNG NHẬP ---
-        loginLink.textContent = "Đăng nhập";
-        loginLink.href = "login.html";
-        
-        if (logoutLink) logoutLink.style.display = 'none';
-        if (registerBtn) registerBtn.style.display = 'inline-block';
+        authGroup.innerHTML = `
+            <div class="header-actions">
+                ${actionLink}
+                <a href="#" onclick="handleLogout()" class="btn-login">Đăng xuất</a>
+            </div>
+        `;
     }
+}
 
-    // --- XỬ LÝ SỰ KIỆN ĐĂNG XUẤT ---
-    if (logoutLink) {
-        logoutLink.addEventListener('click', function(e) {
-            e.preventDefault();
-            localStorage.removeItem('jwt_token');
-            localStorage.removeItem('user_id');
-            window.location.href = 'index.html';
+function handleLogout() {
+    localStorage.clear();
+    alert("Đã đăng xuất thành công!");
+    window.location.href = 'index.html';
+}
+
+async function handleLogin(email, password) {
+    const loginMsg = document.getElementById('login-msg');
+    try {
+        const response = await fetch(`${BASE_GATEWAY_URL}/users/api/v1/users/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
         });
-    }
-});
 
-// --- 3. CÁC HÀM HỖ TRỢ LẤY DỮ LIỆU ---
+        const data = await response.json();
 
-async function fetchUserName(userId) {
-    try {
-        const response = await fetch(`${BASE_GATEWAY_URL}/users/users/${userId}`); 
         if (response.ok) {
-            const user = await response.json();
-            return user.name || `User ID ${userId}`;
+            localStorage.setItem('jwt_token', data.access_token);
+            localStorage.setItem('user_id', data.user_id);
+            localStorage.setItem('user_role', data.role);
+            
+            alert("Đăng nhập thành công!");
+            window.location.href = (data.role === 'admin') ? 'admin.html' : 'index.html';
+        } else {
+            if(loginMsg) loginMsg.textContent = "❌ " + (data.message || "Sai tài khoản hoặc mật khẩu");
         }
-        return `User ID ${userId} (Lỗi truy cập T1)`; 
     } catch (error) {
-        return `Lỗi Kết nối T1`;
+        console.error("Login error:", error);
+        if(loginMsg) loginMsg.textContent = "❌ Lỗi kết nối đến Server!";
     }
 }
 
-async function fetchCarModelName(carId) {
+function getUserRole() {
+    const token = localStorage.getItem('jwt_token');
+    if (!token) return null;
     try {
-        const response = await fetch(`${BASE_GATEWAY_URL}/catalog/catalog/cars/${carId}`); 
-        if (response.ok) {
-            const car = await response.json();
-            return car.model_name || `Car ID ${carId}`;
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return payload.role; 
+    } catch (e) { return null; }
+}
+
+// --- 3. LUỒNG ĐẶT CỌC & THANH TOÁN (CUSTOMER) ---
+
+async function handleDeposit(carId, amount) {
+    if (!localStorage.getItem('jwt_token')) {
+        alert("Vui lòng đăng nhập để thực hiện đặt cọc!");
+        window.location.href = 'login.html';
+        return;
+    }
+
+    try {
+        const response = await fetch(`${BASE_GATEWAY_URL}/orders/api/v1/orders`, {
+            method: 'POST',
+            headers: getAuthHeader(),
+            body: JSON.stringify({ items: [{ car_id: carId, quantity: 1 }] })
+        });
+
+        const order = await response.json();
+        
+        const finalOrderId = order.id || order._id || (order.data && (order.data.id || order.data._id));
+
+        if (response.ok && finalOrderId) {
+            window.location.href = `payment.html?orderId=${finalOrderId}&amount=${order.total_amount || amount}`;
+        } else {
+            console.error("Phản hồi đơn hàng lỗi:", order);
+            alert("Lỗi hệ thống: " + (order.message || "Không nhận được ID đơn hàng từ Server."));
         }
-        return `Car ID ${carId} (Lỗi truy cập T2)`;
     } catch (error) {
-        return `Lỗi Kết nối T2`;
+        console.error("Lỗi đặt hàng:", error);
+        alert("Lỗi kết nối dịch vụ đặt hàng!");
     }
 }
 
+// --- 4. ADMIN: HẸN LỊCH & THÔNG BÁO ---
 
-// --- 4. HÀM VẼ BIỂU ĐỒ (MỚI) ---
+function showScheduleForm(orderId) {
+    const modal = document.getElementById('scheduleModal');
+    if (modal) {
+        document.getElementById('currentOrderId').value = orderId;
+        modal.classList.remove('hidden'); 
+        modal.style.display = 'block';    
+    }
+}
 
-function renderCharts(orders, carList) {
-    // 1. Dữ liệu Trạng thái Đơn hàng (Orders)
-    const statusCounts = orders.reduce((acc, order) => {
-        acc[order.status] = (acc[order.status] || 0) + 1;
-        return acc;
-    }, {});
+async function submitSchedule() {
+    const orderId = document.getElementById('currentOrderId').value;
+    const address = document.getElementById('showroomAddress').value;
+    const time = document.getElementById('appointmentTime').value;
 
-    const statusLabels = Object.keys(statusCounts);
-    const statusData = Object.values(statusCounts);
-    const statusColors = statusLabels.map(status => {
-        if (status === 'Confirmed') return '#4CAF50';
-        if (status === 'Pending') return '#FFC107';
-        if (status === 'Canceled') return '#F44336';
-        return '#9E9E9E';
-    });
+    if(!time) return alert("Vui lòng chọn thời gian hẹn!");
 
-    const orderStatusCtx = document.getElementById('orderStatusChart').getContext('2d');
-    new Chart(orderStatusCtx, {
-        type: 'pie',
-        data: {
-            labels: statusLabels,
-            datasets: [{
-                data: statusData,
-                backgroundColor: statusColors,
-            }]
-        },
-        options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
-    });
+    const messageContent = `✨ THÔNG BÁO LỊCH HẸN ✨\n📍 Địa điểm: ${address}\n⏰ Thời gian: ${new Date(time).toLocaleString('vi-VN')}`;
 
-    // 2. Dữ liệu Tồn kho Sản phẩm (Catalog)
-    // Lấy tồn kho của tất cả xe
-    const inventoryLabels = carList.map(car => car.model_name);
-    // Lưu ý: Tồn kho T2 (Catalog Service) chỉ lấy tổng từ DB, không phải từ API.
-    // Vì bạn chưa có API Inventory Stats, ta sẽ tính tổng tạm thời bằng cách giả định.
-    // Tạm thời, ta dùng giá trị base_price để tạo biểu đồ ví dụ.
-    const inventoryData = carList.map(car => car.base_price); 
+    try {
+        await fetch(`${BASE_GATEWAY_URL}/chat/api/v1/chat/schedule`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order_id: orderId, message: messageContent })
+        });
+
+        const res = await fetch(`${BASE_GATEWAY_URL}/orders/api/v1/orders/${orderId}/confirm`, {
+            method: 'PUT',
+            headers: getAuthHeader()
+        });
+
+        if (res.ok) {
+            alert("Đã gửi lịch hẹn thành công!");
+            location.reload(); 
+        }
+    } catch (e) {
+        alert("Lỗi khi gửi lịch hẹn!");
+    }
+}
+
+// --- 5. LOGIC CHATBOX REAL-TIME ---
+
+function openChat(orderId, name) {
+    const chatWrapper = document.getElementById('chatWrapper');
+    if (chatWrapper) {
+        chatWrapper.style.display = 'flex';
+        chatWrapper.setAttribute('data-current-order', orderId);
+        document.getElementById('chatWithUser').textContent = name;
+        
+        if (socket && socket.connected) {
+            socket.emit('join', { order_id: orderId });
+        }
+        // FIX: Xóa sạch tin nhắn cũ trước khi tải mới để tránh lặp hoặc trắng
+        document.getElementById('chatMessages').innerHTML = '';
+        loadChatHistory(orderId);
+    }
+}
+
+function closeChat() {
+    document.getElementById('chatWrapper').style.display = 'none';
+}
+
+async function loadChatHistory(orderId) {
+    const chatMessages = document.getElementById('chatMessages');
+    chatMessages.innerHTML = '<p style="text-align:center;font-size:10px;">Đang tải...</p>';
     
-    // Nếu bạn đã có API /catalog/reports/inventory-stats, hãy gọi nó ở đây.
+    try {
+        const res = await fetch(`${BASE_GATEWAY_URL}/chat/api/v1/chat/${orderId}`, { headers: getAuthHeader() });
+        const messages = await res.json();
+        chatMessages.innerHTML = '';
+        messages.forEach(msg => appendMessageToUI(msg));
+        // Ép cuộn xuống cuối sau khi tải xong lịch sử
+        setTimeout(() => { chatMessages.scrollTop = chatMessages.scrollHeight; }, 100);
+    } catch (e) { 
+        console.error("Lỗi tải lịch sử chat");
+        chatMessages.innerHTML = '<p style="text-align:center;color:red;">Lỗi tải tin nhắn.</p>';
+    }
+}
+
+async function sendChatMessage() {
+    const input = document.getElementById('chatInput');
+    const orderId = document.getElementById('chatWrapper').getAttribute('data-current-order');
+    const role = getUserRole();
+    const name = (role === 'admin' ? "Quản trị viên" : "Khách hàng");
     
-    const inventoryCtx = document.getElementById('inventoryChart').getContext('2d');
-    new Chart(inventoryCtx, {
-        type: 'bar',
-        data: {
-            labels: inventoryLabels,
-            datasets: [{
-                label: 'Giá niêm yết (triệu VND)', // Giả định
-                data: inventoryData.map(price => price / 1000000), 
-                backgroundColor: '#1464F4',
-            }]
-        },
-        options: { 
-            responsive: true,
-            scales: { y: { beginAtZero: true } }
+    if (!input.value.trim()) return;
+
+    const msgData = {
+        order_id: parseInt(orderId),
+        role: role,
+        name: name,
+        content: input.value,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    if (socket && socket.connected) {
+        socket.emit('send_message', msgData);
+        // FIX: Tự hiển thị tin nhắn của chính mình ngay lập tức để không bị trắng khung
+        appendMessageToUI(msgData);
+    } else {
+        alert("Mất kết nối máy chủ Chat!");
+    }
+    input.value = '';
+}
+
+if (socket) {
+    socket.on('receive_message', function(data) {
+        const currentOrder = document.getElementById('chatWrapper').getAttribute('data-current-order');
+        // Chỉ append nếu tin nhắn thuộc về đơn hàng đang mở
+        if (parseInt(data.order_id) === parseInt(currentOrder)) {
+            appendMessageToUI(data);
         }
     });
 }
 
+function appendMessageToUI(data) {
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return;
 
-// --- 5. HÀM CHÍNH TẢI DASHBOARD (ĐÃ TÍCH HỢP BIỂU ĐỒ & KPI) ---
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `msg ${data.role === 'admin' ? 'msg-admin' : 'msg-customer'}`;
+    msgDiv.innerHTML = `<strong>${data.name}:</strong><br>${data.content}`;
+    
+    chatMessages.appendChild(msgDiv);
+    // Tự động cuộn xuống dưới cùng
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// --- 6. DASHBOARD ADMIN (MASHUP & CHARTS) ---
 
 async function loadDashboard() {
     const dashboardBody = document.getElementById('orders-table-body');
-    const statusMessage = document.getElementById('status-message');
-    const totalRevenueDiv = document.getElementById('total-revenue');
-    
+    const totalRevElem = document.getElementById('total-revenue');
     if (!dashboardBody) return;
 
-    dashboardBody.innerHTML = '<tr><td colspan="5">Đang tải dữ liệu...</td></tr>';
-    totalRevenueDiv.textContent = 'Đang tải...';
-    statusMessage.innerHTML = '';
-    
-    let orders = [];
-    let carList = [];
-    let totalConfirmedRevenue = 0;
-
     try {
-        // TẢI TẤT CẢ ĐƠN HÀNG (T3)
-        const orderResponse = await fetch(`${BASE_GATEWAY_URL}/orders/orders`); 
-        if (!orderResponse.ok) {
-            statusMessage.innerHTML = `Lỗi Tải Đơn Hàng (T3): Server trả về ${orderResponse.status}.`;
-            return;
-        }
-        orders = await orderResponse.json();
+        const orderRes = await fetch(`${BASE_GATEWAY_URL}/orders/api/v1/orders`, { headers: getAuthHeader() });
+        if (!orderRes.ok) throw new Error("Order Service disconnected");
         
-        // TẢI TẤT CẢ DANH MỤC XE (T2 - Cần cho cả bảng và biểu đồ Tồn kho)
-        const catalogResponse = await fetch(`${BASE_GATEWAY_URL}/catalog/catalog/cars`); 
-        if (catalogResponse.ok) {
-            carList = await catalogResponse.json();
-        }
+        const orders = await orderRes.json();
+        let totalRevenue = 0;
+        let statusCounts = { 'Pending': 0, 'Paid': 0, 'Scheduled': 0, 'Confirmed': 0 };
 
-    } catch (error) {
-        statusMessage.innerHTML = `Lỗi Kết nối Gateway: Đảm bảo Docker (Gateway, T1, T2, T3) đang chạy.`;
-        return;
+        dashboardBody.innerHTML = '';
+        
+        const rows = await Promise.all(orders.map(async (order, index) => {
+            const orderId = order.id || order._id || (index + 1);
+            
+            if (['Paid', 'Scheduled', 'Confirmed'].includes(order.status)) {
+                totalRevenue += (order.total_amount || 0);
+            }
+            statusCounts[order.status] = (statusCounts[order.status] || 0) + 1;
+
+            let userName = `Người dùng #${order.user_id}`;
+            try {
+                const userRes = await fetch(`${BASE_GATEWAY_URL}/users/api/v1/users/${order.user_id}`, { headers: getAuthHeader() });
+                if (userRes.ok) {
+                    const user = await userRes.json();
+                    userName = user.name || userName;
+                }
+            } catch (e) { console.warn("Lỗi lấy thông tin user"); }
+            
+            let actionBtn = "";
+            if (['Paid', 'Confirmed', 'Pending'].includes(order.status)) {
+                actionBtn = `<button class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700" onclick="showScheduleForm('${orderId}')">✅ Hẹn lịch</button>`;
+            } else if (order.status === 'Scheduled') {
+                actionBtn = `<button class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700" onclick="openChat('${orderId}', '${userName}')">💬 Chat</button>`;
+            } else {
+                actionBtn = `<span class="text-gray-400 text-xs">N/A</span>`;
+            }
+
+            return `
+                <tr>
+                    <td class="px-6 py-4">#${orderId}</td>
+                    <td class="px-6 py-4 font-bold text-gray-700">${userName}</td>
+                    <td class="px-6 py-4">Xe điện VinFast</td>
+                    <td class="px-6 py-4 text-blue-600 font-bold">${(order.total_amount || 0).toLocaleString()} VND</td>
+                    <td class="px-6 py-4"><span class="status ${order.status}">${order.status}</span></td>
+                    <td class="px-6 py-4">${actionBtn}</td>
+                </tr>`;
+        }));
+
+        dashboardBody.innerHTML = rows.join('');
+        if (totalRevElem) totalRevElem.textContent = totalRevenue.toLocaleString() + " VND";
+        initCharts(statusCounts);
+
+    } catch (e) { 
+        console.error("Lỗi Dashboard:", e); 
+        dashboardBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:red; padding:20px;">⚠️ Lỗi kết nối dịch vụ.</td></tr>';
     }
-    
-    dashboardBody.innerHTML = ''; 
-    
-    if (orders.length === 0) {
-         dashboardBody.innerHTML = '<tr><td colspan="5">Chưa có đơn hàng nào được tạo thành công.</td></tr>';
-    }
-
-    // MAP dữ liệu xe vào một Dict để tra cứu nhanh hơn
-    const carMap = carList.reduce((map, car) => {
-        map[car.id] = car;
-        return map;
-    }, {});
-
-    // Tích hợp và hiển thị BẢNG
-    for (const order of orders) {
-        const userName = await fetchUserName(order.user_id);
-        
-        let itemDetails = '';
-        for (const item of order.items) {
-            const car = carMap[item.car_model_id] || { model_name: `Xe ID ${item.car_model_id}` };
-            const priceVND = item.unit_price.toLocaleString('vi-VN') + ' VND'; 
-
-            itemDetails += `${car.model_name} (${item.quantity} chiếc, ${priceVND}/chiếc)<br>`;
-        }
-        
-        // TÍNH TOÁN KPI DOANH THU
-        if (order.status === 'Confirmed') {
-            totalConfirmedRevenue += order.total_amount;
-        }
-        
-        const row = dashboardBody.insertRow();
-        row.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${order.order_id}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${userName}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${itemDetails}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">${order.total_amount.toLocaleString('vi-VN')} VND</td>
-            <td class="px-6 py-4 whitespace-nowrap"><span class="status ${order.status}">${order.status}</span></td>
-        `;
-    }
-    
-    // CẬP NHẬT KPI & BIỂU ĐỒ
-    totalRevenueDiv.textContent = totalConfirmedRevenue.toLocaleString('vi-VN') + ' VND';
-    renderCharts(orders, carList);
 }
+
+function initCharts(statusData) {
+    ['orderStatusChart', 'inventoryChart'].forEach(id => {
+        const existingChart = Chart.getChart(id);
+        if (existingChart) existingChart.destroy();
+    });
+
+    const ctxStatus = document.getElementById('orderStatusChart');
+    if (ctxStatus) {
+        new Chart(ctxStatus, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(statusData),
+                datasets: [{
+                    data: Object.values(statusData),
+                    backgroundColor: ['#fff3cd', '#d1fae5', '#dbeafe', '#fef3c7']
+                }]
+            },
+            options: { maintainAspectRatio: false }
+        });
+    }
+
+    const ctxInv = document.getElementById('inventoryChart');
+    if (ctxInv) {
+        new Chart(ctxInv, {
+            type: 'bar',
+            data: {
+                labels: ['VF 8', 'VF 9', 'VF 7'],
+                datasets: [{
+                    label: 'Sẵn có',
+                    data: [12, 5, 18],
+                    backgroundColor: '#1464F4'
+                }]
+            },
+            options: { maintainAspectRatio: false }
+        });
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    updateHeaderUI();
+    if (document.getElementById('orders-table-body')) {
+        loadDashboard();
+    }
+});

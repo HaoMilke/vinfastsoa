@@ -1,4 +1,4 @@
-# database.py
+# order-service/database.py
 
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
@@ -13,15 +13,17 @@ class Order(db.Model):
     # user_id: Khóa ngoại giả định, liên kết với User Service (T1)
     user_id = db.Column(db.Integer, nullable=False) 
     order_date = db.Column(db.DateTime, default=datetime.utcnow)
-    status = db.Column(db.String(50), default='Pending') # Pending, Confirmed, Shipped, Cancelled
+    status = db.Column(db.String(50), default='Pending') # Pending, Paid, Scheduled, Confirmed, Cancelled
     total_amount = db.Column(db.Integer, default=0) # Tổng tiền
     
     # Mối quan hệ với các mặt hàng trong đơn hàng
     items = db.relationship('OrderItem', backref='order', lazy='dynamic')
 
     def to_dict(self):
+        """Chuyển đổi đối tượng Order thành dictionary để trả về JSON."""
         return {
-            'order_id': self.id,
+            # SỬA LỖI: Đổi từ 'order_id' thành 'id' để khớp với Frontend (script.js)
+            'id': self.id, 
             'user_id': self.user_id,
             'order_date': self.order_date.isoformat(),
             'status': self.status,
@@ -42,8 +44,10 @@ class OrderItem(db.Model):
     unit_price = db.Column(db.Integer, nullable=False) # Giá tại thời điểm đặt hàng
     
     def to_dict(self):
+        """Chuyển đổi đối tượng OrderItem thành dictionary."""
         return {
-            'item_id': self.id,
+            # SỬA LỖI: Đổi từ 'item_id' thành 'id' để đồng bộ cấu trúc
+            'id': self.id,
             'car_model_id': self.car_model_id,
             'quantity': self.quantity,
             'unit_price': self.unit_price,
