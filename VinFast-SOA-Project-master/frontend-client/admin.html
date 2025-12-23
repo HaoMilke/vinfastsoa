@@ -23,6 +23,7 @@
         .msg { padding: 8px 12px; border-radius: 12px; font-size: 13px; max-width: 85%; line-height: 1.4; position: relative; }
         .msg-admin { align-self: flex-end; background: #1464F4; color: white; border-bottom-right-radius: 2px; }
         .msg-customer { align-self: flex-start; background: #e2e8f0; color: #1e293b; border-bottom-left-radius: 2px; }
+        .msg-system { align-self: center; background: #fef3c7; color: #92400e; border-radius: 6px; font-style: italic; font-size: 11px; text-align: center; max-width: 95%; }
         .msg-time { font-size: 10px; opacity: 0.7; margin-bottom: 2px; display: block; }
     </style>
 </head>
@@ -30,8 +31,7 @@
     <div class="max-w-7xl mx-auto py-10 px-4">
         <div class="flex justify-between items-center mb-8">
             <h1 class="text-3xl font-bold text-gray-800">VinFast Admin - Điều phối Đơn hàng</h1>
-            <div id="auth-group">
-                </div>
+            <div id="auth-group"></div>
         </div>
         
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
@@ -115,8 +115,8 @@
             </span>
             <button onclick="closeChat()" class="text-white text-xl hover:text-gray-200">&times;</button>
         </div>
-        <div id="chatMessages" class="chat-messages">
-            </div>
+        <input type="hidden" id="currentChatOrderId">
+        <div id="chatMessages" class="chat-messages"></div>
         <div class="p-3 border-t flex gap-2 bg-white">
             <input type="text" id="chatInput" onkeypress="if(event.key==='Enter') sendChatMessage()" class="flex-1 border rounded-md p-2 text-sm focus:outline-none focus:border-blue-500" placeholder="Nhập nội dung...">
             <button onclick="sendChatMessage()" class="bg-blue-600 text-white px-4 py-1 rounded-md text-sm font-semibold hover:bg-blue-700">Gửi</button>
@@ -125,12 +125,142 @@
 
     <script src="script.js"></script>
     <script>
-        // Khởi tạo Dashboard khi trang load
+        // 1. KHỞI TẠO DASHBOARD & LẮNG NGHE SOCKET
         document.addEventListener('DOMContentLoaded', () => {
-            if (typeof loadDashboard === 'function') {
-                loadDashboard();
+            if (typeof updateHeaderUI === 'function') updateHeaderUI();
+            if (typeof loadDashboard === 'function') loadDashboard();
+
+            if (socket) {
+                socket.on('receive_message', (msg) => {
+                    const activeOrderId = document.getElementById('currentChatOrderId').value;
+                    if (activeOrderId == msg.order_id) {
+                        appendMessageToUI(msg);
+                    }
+                });
             }
         });
+
+        // 2. MỞ CHAT & TẢI LỊCH SỬ (Khắc phục lỗi mất tin nhắn)
+        async function openChat(orderId, customerName) {
+            const chatWrapper = document.getElementById('chatWrapper');
+            const chatMessages = document.getElementById('chatMessages');
+            const chatWithUser = document.getElementById('chatWithUser');
+            
+            chatWrapper.style.display = 'flex';
+            chatWithUser.textContent = customerName;
+            document.getElementById('currentChatOrderId').value = orderId;
+            chatMessages.innerHTML = '<p class="text-center text-gray-400 text-xs mt-4">Đang tải lịch sử trò chuyện...</p>';
+
+            socket.emit('join', { order_id: parseInt(orderId) });
+
+            try {
+                // Gọi qua Gateway cổng 8000
+                const response = await fetch(`${BASE_GATEWAY_URL}/chat/api/v1/chat/${orderId}`, {
+                    headers: getAuthHeader()
+                });
+                if (response.ok) {
+                    const history = await response.json();
+                    chatMessages.innerHTML = ''; 
+                    history.forEach(msg => appendMessageToUI(msg));
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            } catch (error) {
+                chatMessages.innerHTML = '<p class="text-center text-red-500 text-xs">Lỗi: Không thể tải lịch sử.</p>';
+            }
+        }
+
+        // 3. GỬI TIN NHẮN TỪ ADMIN
+        function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const orderId = document.getElementById('currentChatOrderId').value;
+            const content = input.value.trim();
+
+            if (!content || !orderId) return;
+
+            const msgData = {
+                order_id: parseInt(orderId),
+                role: 'admin',
+                name: 'Quản trị viên',
+                content: content
+            };
+
+            // Hiển thị ngay lên UI (Optimistic UI) để mượt mà hơn
+            appendMessageToUI({
+                ...msgData,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+
+            socket.emit('send_message', msgData);
+            input.value = '';
+        }
+
+        // 4. HIỂN THỊ TIN NHẮN LÊN UI
+        function appendMessageToUI(msg) {
+            const chatMessages = document.getElementById('chatMessages');
+            const msgDiv = document.createElement('div');
+            
+            let typeClass = 'msg-customer';
+            if (msg.role === 'admin') typeClass = 'msg-admin';
+            if (msg.role === 'system') typeClass = 'msg-system';
+            
+            msgDiv.className = `msg ${typeClass}`;
+            
+            if (msg.role !== 'system') {
+                msgDiv.innerHTML = `
+                    <span class="msg-time">${msg.name} • ${msg.time || ''}</span>
+                    <div>${msg.content}</div>
+                `;
+            } else {
+                msgDiv.innerHTML = `<div>${msg.content}</div>`;
+            }
+            
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // 5. XÁC NHẬN LỊCH HẸN (Gửi thông báo hệ thống tự động)
+        async function submitSchedule() {
+            const orderId = document.getElementById('currentOrderId').value;
+            const address = document.getElementById('showroomAddress').value;
+            const time = document.getElementById('appointmentTime').value;
+
+            if (!time) return alert("Vui lòng chọn thời gian hẹn!");
+
+            try {
+                // Bước 1: Gọi Order Service qua Gateway
+                const response = await fetch(`${BASE_GATEWAY_URL}/orders/api/v1/orders/${orderId}/confirm`, {
+                    method: 'PUT',
+                    headers: getAuthHeader()
+                });
+
+                if (response.ok) {
+                    // Bước 2: Gửi thông báo hệ thống vào Chat
+                    const appointmentLabel = new Date(time).toLocaleString('vi-VN');
+                    await fetch(`${BASE_GATEWAY_URL}/chat/api/v1/chat/system_notify`, {
+                        method: 'POST',
+                        headers: getAuthHeader(),
+                        body: JSON.stringify({
+                            order_id: parseInt(orderId),
+                            content: `📅 THÔNG BÁO: Đã xác nhận lịch hẹn tại ${address} vào lúc ${appointmentLabel}.`
+                        })
+                    });
+
+                    alert("Xác nhận lịch hẹn thành công!");
+                    closeModal();
+                    loadDashboard(); 
+                } else {
+                    alert("Lỗi khi xác nhận lịch hẹn.");
+                }
+            } catch (error) {
+                console.error("Schedule error:", error);
+                alert("Lỗi kết nối máy chủ.");
+            }
+        }
+
+        function closeChat() {
+            document.getElementById('chatWrapper').style.display = 'none';
+            document.getElementById('currentChatOrderId').value = '';
+        }
 
         function closeModal() {
             document.getElementById('scheduleModal').classList.add('hidden');

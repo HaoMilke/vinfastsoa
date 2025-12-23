@@ -11,13 +11,13 @@ from sqlalchemy import func
 
 app = Flask(__name__)
 # Cho phép CORS để Gateway và Frontend có thể gọi API
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # --- CẤU HÌNH BẢO MẬT ---
 # Lấy Key từ Docker, nếu không có dùng key mặc định
 JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'vinfast_secret_key_mac_dinh_123')
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///user_service.db' 
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL", "sqlite:///user_service.db") 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -33,21 +33,25 @@ class User(db.Model):
     role = db.Column(db.String(20), default='customer') 
 
     def set_password(self, password):
+        """Mã hóa mật khẩu"""
         self.password_hash = pwd_context.hash(password)
 
     def verify_password(self, password):
+        """Xác thực mật khẩu"""
         return pwd_context.verify(password, self.password_hash)
 
     def to_dict(self):
+        """Trả về dữ liệu dạng dictionary cho Frontend"""
         return {
             'id': self.id,
-            'name': self.name,
+            'name': self.name, # Trường này cực kỳ quan trọng để hiện tên trên Admin Dashboard
             'email': self.email,
             'role': self.role
         }
 
 # --- HÀM PHỤ TRỢ: Lấy User từ Token ---
 def get_user_from_token():
+    """Hàm giải mã token từ Header Authorization"""
     auth_header = request.headers.get('Authorization')
     if not auth_header:
         return None, "Thiếu Token xác thực"
@@ -67,6 +71,7 @@ def get_user_from_token():
 
 @app.route('/api/v1/users/register', methods=['POST'])
 def register():
+    """Đăng ký tài khoản mới"""
     data = request.json
     name = data.get('name')
     email = data.get('email')
@@ -85,9 +90,9 @@ def register():
     
     return jsonify({"user_id": new_user.id, "message": "Đăng ký thành công"}), 201
 
-# Giữ nguyên code cũ của bạn nhưng đảm bảo đoạn Login như sau:
 @app.route('/api/v1/users/login', methods=['POST'])
 def login():
+    """Đăng nhập người dùng"""
     data = request.json
     email = data.get('email')
     password = data.get('password')
@@ -104,12 +109,14 @@ def login():
             'message': 'Đăng nhập thành công',
             'access_token': token, 
             'user_id': user.id,
-            'role': user.role
+            'role': user.role,
+            'name': user.name
         }), 200
     return jsonify({"message": "Email hoặc mật khẩu sai"}), 401
 
 @app.route('/api/v1/users/<int:user_id>', methods=['GET'])
 def get_user_info(user_id):
+    """Lấy thông tin một user cụ thể (Dùng cho Admin Dashboard)"""
     user = User.query.get(user_id)
     if user:
         return jsonify(user.to_dict()), 200
@@ -117,6 +124,7 @@ def get_user_info(user_id):
 
 @app.route('/api/v1/users/update', methods=['PUT'])
 def update_profile():
+    """Cập nhật thông tin profile của chính user"""
     user, error = get_user_from_token()
     if error:
         return jsonify({"message": error}), 401
@@ -138,6 +146,7 @@ def update_profile():
 
 @app.route('/api/v1/users/change-password', methods=['PUT'])
 def change_password():
+    """Đổi mật khẩu người dùng"""
     user, error = get_user_from_token()
     if error:
         return jsonify({"message": error}), 401
@@ -159,6 +168,7 @@ def change_password():
 
 @app.route('/api/v1/reports/users/roles', methods=['GET'])
 def get_user_role_stats():
+    """Thống kê số lượng theo vai trò (Cho biểu đồ Admin)"""
     try:
         stats = db.session.query(User.role, func.count(User.id)).group_by(User.role).all()
         labels = [s[0] for s in stats]
@@ -170,12 +180,13 @@ def get_user_role_stats():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        # Tạo tài khoản Admin mặc định nếu chưa có để test
+        # Tạo tài khoản Admin mặc định
         if not User.query.filter_by(email='admin@vinfast.com').first():
-            admin = User(name='Hệ thống VinFast', email='admin@vinfast.com', role='admin')
+            admin = User(name='Quản trị viên VinFast', email='admin@vinfast.com', role='admin')
             admin.set_password('admin123')
             db.session.add(admin)
             db.session.commit()
+            print("✅ Đã khởi tạo Admin mặc định: admin@vinfast.com / admin123")
 
     print("User Service đang khởi động trên cổng 5001...")
     app.run(host='0.0.0.0', port=5001, debug=True)

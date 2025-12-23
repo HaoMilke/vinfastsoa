@@ -30,14 +30,17 @@
         .Paid { background: #e3f2fd; color: #1976d2; }
         .Scheduled { background: #e8f5e9; color: #2e7d32; }
         .Pending { background: #fff3cd; color: #856404; }
+        .Confirmed { background: #e0e7ff; color: #4338ca; }
 
         /* Chatbox Style */
         .chat-fixed { position: fixed; bottom: 20px; right: 20px; width: 350px; height: 450px; background: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); display: none; flex-direction: column; z-index: 1000; }
         .chat-header { background: #1464F4; color: white; padding: 15px; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center; }
         .chat-messages { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #f8fafc; }
         .msg { padding: 10px; border-radius: 12px; font-size: 14px; max-width: 80%; line-height: 1.4; }
-        .msg-admin { align-self: flex-start; background: #e2e8f0; color: #1e293b; }
-        .msg-customer { align-self: flex-end; background: #1464F4; color: white; }
+        .msg-admin { align-self: flex-start; background: #e2e8f0; color: #1e293b; border-bottom-left-radius: 2px; }
+        .msg-customer { align-self: flex-end; background: #1464F4; color: white; border-bottom-right-radius: 2px; }
+        .msg-system { align-self: center; background: #fef3c7; color: #92400e; border-radius: 6px; font-style: italic; font-size: 11px; text-align: center; max-width: 95%; }
+        .msg-time { font-size: 10px; opacity: 0.7; margin-bottom: 2px; display: block; }
     </style>
 </head>
 <body>
@@ -90,30 +93,40 @@
             <span class="font-bold">💬 Hỗ trợ VinFast</span>
             <button onclick="closeChat()" style="background:none; border:none; color:white; font-size:20px; cursor:pointer;">&times;</button>
         </div>
-        <div id="chatMessages" class="chat-messages">
-            </div>
+        <input type="hidden" id="currentChatOrderId">
+        <div id="chatMessages" class="chat-messages"></div>
         <div style="padding: 12px; border-top: 1px solid #eee; display: flex; gap: 8px;">
-            <input type="text" id="chatInput" style="flex:1; border: 1px solid #ddd; padding: 8px; border-radius: 6px;" placeholder="Nhập tin nhắn...">
+            <input type="text" id="chatInput" onkeypress="if(event.key==='Enter') sendChatMessage()" style="flex:1; border: 1px solid #ddd; padding: 8px; border-radius: 6px;" placeholder="Nhập tin nhắn...">
             <button onclick="sendChatMessage()" style="background:#1464F4; color:white; padding:8px 15px; border:none; border-radius:6px;">Gửi</button>
         </div>
     </div>
 
     <script src="script.js"></script>
     <script>
-        // Tự động load dữ liệu khi vào trang
+        // 1. TỰ ĐỘNG LOAD DỮ LIỆU KHI VÀO TRANG
         document.addEventListener('DOMContentLoaded', () => {
-            // Kiểm tra hàm loadProfile có trong script.js không, nếu không có hàm này sẽ gây lỗi đỏ
             if (typeof loadProfile === 'function') {
                 loadProfile();
             }
-            loadCustomerOrders(); // Gọi hàm lấy danh sách đơn hàng
+            loadCustomerOrders();
+
+            // Lắng nghe tin nhắn real-time từ Socket thông qua Gateway
+            if (socket) {
+                socket.on('receive_message', (msg) => {
+                    const activeOrderId = document.getElementById('currentChatOrderId').value;
+                    // Chỉ hiển thị nếu khách hàng đang mở đúng khung chat của đơn hàng đó
+                    if (activeOrderId == msg.order_id) {
+                        appendMessageToUI(msg);
+                    }
+                });
+            }
         });
 
+        // 2. LẤY DANH SÁCH ĐƠN HÀNG
         async function loadCustomerOrders() {
             const tbody = document.getElementById('user-orders-body');
-            
             try {
-                // SỬA: Thêm backtick và gọi đúng API Gateway
+                // Gọi API qua Gateway cổng 8000
                 const response = await fetch(`${BASE_GATEWAY_URL}/orders/api/v1/orders`, {
                     headers: getAuthHeader()
                 });
@@ -122,20 +135,18 @@
                 const orders = await response.json();
                 
                 tbody.innerHTML = '';
-                
                 if (orders.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center">Bạn chưa có đơn hàng nào.</td></tr>';
                     return;
                 }
 
-                // Sử dụng Promise.all để lấy tên xe thực tế cho từng đơn hàng
+                // Lấy tên xe tương ứng cho từng đơn hàng
                 const rows = await Promise.all(orders.map(async (order) => {
                     let carName = "Xe VinFast";
                     try {
-                        // Lấy car_id từ item đầu tiên trong đơn hàng để tìm tên xe
                         if (order.items && order.items.length > 0) {
                             const carId = order.items[0].car_model_id;
-                            const catRes = await fetch(`${BASE_GATEWAY_URL}/catalog/catalog/cars/${carId}`);
+                            const catRes = await fetch(`${BASE_GATEWAY_URL}/catalog/api/v1/cars/${carId}`);
                             if (catRes.ok) {
                                 const carData = await catRes.json();
                                 carName = carData.model_name;
@@ -151,18 +162,105 @@
                             <td><strong>${carName}</strong></td>
                             <td><span class="status-tag ${order.status}">${order.status}</span></td>
                             <td>
-                                ${canChat ? `<button class="btn-chat" onclick="openChat('${order.id}', 'Hệ thống VinFast')">💬 Nhắn tin</button>` : '---'}
+                                ${canChat ? `<button class="btn-chat" onclick="openChat('${order.id}', 'Hỗ trợ VinFast')">💬 Nhắn tin</button>` : '---'}
                             </td>
                         </tr>
                     `;
                 }));
-
                 tbody.innerHTML = rows.join('');
-
             } catch (e) {
                 console.error("Lỗi:", e);
                 tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:red">⚠️ Lỗi kết nối dịch vụ đơn hàng.</td></tr>';
             }
+        }
+
+        // 3. MỞ KHUNG CHAT & TẢI LỊCH SỬ (Khắc phục lỗi mất tin nhắn)
+        async function openChat(orderId, partnerName) {
+            const chatWrapper = document.getElementById('chatWrapper');
+            const chatMessages = document.getElementById('chatMessages');
+            
+            chatWrapper.style.display = 'flex';
+            document.getElementById('currentChatOrderId').value = orderId;
+            chatMessages.innerHTML = '<p style="text-align:center;font-size:11px;color:#999;margin-top:20px;">Đang tải lịch sử trò chuyện...</p>';
+
+            // Bước A: Tham gia vào phòng chat của đơn hàng
+            if (socket && socket.connected) {
+                socket.emit('join', { order_id: parseInt(orderId) });
+            }
+
+            // Bước B: Lấy lịch sử tin nhắn từ database qua Gateway
+            try {
+                const response = await fetch(`${BASE_GATEWAY_URL}/chat/api/v1/chat/${orderId}`, {
+                    headers: getAuthHeader()
+                });
+                if (response.ok) {
+                    const history = await response.json();
+                    chatMessages.innerHTML = ''; 
+                    history.forEach(msg => appendMessageToUI(msg));
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            } catch (error) {
+                chatMessages.innerHTML = '<p style="text-align:center;color:red;font-size:11px;">Không thể tải lịch sử chat.</p>';
+            }
+        }
+
+        // 4. GỬI TIN NHẮN TỪ KHÁCH HÀNG
+        function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const orderId = document.getElementById('currentChatOrderId').value;
+            const content = input.value.trim();
+
+            if (!content || !orderId) return;
+
+            const msgData = {
+                order_id: parseInt(orderId),
+                role: 'customer',
+                name: localStorage.getItem('user_name') || 'Khách hàng',
+                content: content
+            };
+
+            // Optimistic UI: Hiển thị ngay lên màn hình trước khi gửi
+            appendMessageToUI({
+                ...msgData,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+
+            // Gửi qua Socket tới Gateway
+            if (socket && socket.connected) {
+                socket.emit('send_message', msgData);
+                input.value = '';
+            } else {
+                alert("Mất kết nối máy chủ Chat!");
+            }
+        }
+
+        // 5. HIỂN THỊ TIN NHẮN LÊN UI
+        function appendMessageToUI(msg) {
+            const chatMessages = document.getElementById('chatMessages');
+            const msgDiv = document.createElement('div');
+            
+            let typeClass = 'msg-admin'; // Admin/Hệ thống bên trái
+            if (msg.role === 'customer') typeClass = 'msg-customer'; // Khách hàng bên phải
+            if (msg.role === 'system') typeClass = 'msg-system'; // Hệ thống ở giữa
+            
+            msgDiv.className = `msg ${typeClass}`;
+            
+            if (msg.role !== 'system') {
+                msgDiv.innerHTML = `
+                    <span class="msg-time">${msg.name} • ${msg.time || ''}</span>
+                    <div>${msg.content}</div>
+                `;
+            } else {
+                msgDiv.innerHTML = `<div>${msg.content}</div>`;
+            }
+            
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function closeChat() {
+            document.getElementById('chatWrapper').style.display = 'none';
+            document.getElementById('currentChatOrderId').value = '';
         }
     </script>
 </body>

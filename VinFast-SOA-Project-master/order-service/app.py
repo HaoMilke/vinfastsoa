@@ -13,8 +13,9 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL", "sqlite:/
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 
-# FIX: Sử dụng tên service "catalog" để khớp với docker-compose networks
+# Cấu hình URL các dịch vụ liên quan từ biến môi trường
 CATALOG_SERVICE_URL = os.environ.get("CATALOG_SERVICE_URL", "http://catalog:5002/api/v1")
+CHAT_SERVICE_URL = os.environ.get("CHAT_SERVICE_URL", "http://chat:5005/api/v1")
 
 # --- API 1: TẠO ĐƠN HÀNG (Trạng thái ban đầu: Pending) ---
 @app.route('/api/v1/orders', methods=['POST'])
@@ -40,6 +41,7 @@ def create_order():
             qty = item_data.get('quantity', 1)
 
             try:
+                # Gọi đồng bộ sang Catalog Service để trừ kho
                 response = requests.post(
                     f"{CATALOG_SERVICE_URL}/inventory/reduce",
                     json={"car_id": car_id, "quantity": qty},
@@ -89,7 +91,7 @@ def process_payment(order_id):
         "order_id": order.id
     }), 200
 
-# --- API 3: ADMIN HẸN LỊCH ---
+# --- API 3: ADMIN HẸN LỊCH (Bổ sung logic tích hợp Chat) ---
 @app.route('/api/v1/orders/<int:order_id>/confirm', methods=['PUT'])
 def confirm_order(order_id):
     role = request.headers.get('X-User-Role')
@@ -100,11 +102,33 @@ def confirm_order(order_id):
     if not order:
         return jsonify({"message": "Không tìm thấy đơn hàng"}), 404
     
+    # 1. Cập nhật trạng thái đơn hàng trong database cục bộ
     order.status = 'Scheduled' 
-    db.session.commit()
-    return jsonify({"message": "Đã xác nhận lịch hẹn thành công", "status": "Scheduled"}), 200
+    
+    try:
+        # 2. LOGIC TÍCH HỢP MỚI: Tự động gửi thông báo hệ thống sang Chat Service
+        # Điều này giúp Admin không cần nhắn tin tay sau khi hẹn lịch
+        system_msg_payload = {
+            "order_id": order_id,
+            "content": "📅 THÔNG BÁO TỰ ĐỘNG: Quản trị viên đã xác nhận lịch hẹn cho đơn hàng này. Quý khách vui lòng kiểm tra lại thời gian và địa điểm."
+        }
+        
+        # Gọi POST sang endpoint notify của Chat Service (không cần chờ phản hồi quá lâu)
+        requests.post(f"{CHAT_SERVICE_URL}/chat/system_notify", json=system_msg_payload, timeout=3)
+        
+        db.session.commit()
+        return jsonify({"message": "Đã xác nhận lịch hẹn và bắn thông báo chat", "status": "Scheduled"}), 200
+        
+    except Exception as e:
+        # Nếu có lỗi khi bắn chat, chúng ta vẫn nên commit trạng thái đơn hàng nhưng báo cảnh báo
+        db.session.commit()
+        return jsonify({
+            "message": "Xác nhận lịch thành công nhưng không thể gửi tin nhắn chat", 
+            "status": "Scheduled",
+            "warning": str(e)
+        }), 200
 
-# --- API 4: LẤY DANH SÁCH ĐƠN HÀNG (ĐÃ CÓ LOGIC LỌC DỮ LIỆU) ---
+# --- API 4: LẤY DANH SÁCH ĐƠN HÀNG ---
 @app.route('/api/v1/orders', methods=['GET'])
 def get_all_orders():
     user_id = request.headers.get('X-User-Id')
@@ -126,7 +150,6 @@ def get_all_orders():
         return jsonify({"message": f"Lỗi lấy dữ liệu: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    # THAY ĐỔI QUAN TRỌNG: Khởi tạo DB đúng cách trong app_context
     with app.app_context():
         db.create_all()
         print("Order Service Database initialized!")

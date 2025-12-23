@@ -8,7 +8,8 @@ from sqlalchemy import func
 from flask_cors import CORS 
 
 app = Flask(__name__)
-CORS(app) 
+# Cho phép CORS để API Gateway và Frontend có thể truy cập
+CORS(app, resources={r"/*": {"origins": "*"}}) 
 
 # Cấu hình DB
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL", "sqlite:///catalog_service_v3.db")
@@ -108,20 +109,31 @@ def setup():
 
 @app.route('/api/v1/catalog/cars', methods=['GET'])
 def get_all_cars():
+    """Lấy danh sách xe kèm tổng tồn kho để vẽ biểu đồ Admin."""
     cars = CarModel.query.all()
-    data = [car.to_dict() for car in cars]
-    return jsonify(data), 200
+    result = []
+    for car in cars:
+        car_data = car.to_dict()
+        # Tính tổng tồn kho từ tất cả các chi nhánh
+        total_stock = db.session.query(func.sum(Inventory.stock_quantity)).filter(Inventory.car_model_id == car.id).scalar() or 0
+        car_data['stock_quantity'] = total_stock # Trường quan trọng cho Admin Chart
+        result.append(car_data)
+    return jsonify(result), 200
 
 @app.route('/api/v1/catalog/cars/<int:car_id>', methods=['GET'])
 def get_car_details(car_id):
+    """Lấy chi tiết 1 mẫu xe kèm tổng tồn kho."""
     car = CarModel.query.get(car_id)
     if car:
-        return jsonify(car.to_dict()), 200
+        car_data = car.to_dict()
+        total_stock = db.session.query(func.sum(Inventory.stock_quantity)).filter(Inventory.car_model_id == car.id).scalar() or 0
+        car_data['stock_quantity'] = total_stock
+        return jsonify(car_data), 200
     return jsonify({"message": "Mẫu xe không tồn tại"}), 404
 
 @app.route('/api/v1/inventory/reduce', methods=['POST'])
 def reduce_stock():
-    """API quan trọng phục vụ Saga Pattern từ Order Service."""
+    """API xử lý trừ kho phục vụ Saga Pattern từ Order Service."""
     data = request.json
     car_id = data.get('car_id')
     quantity = data.get('quantity', 1)
