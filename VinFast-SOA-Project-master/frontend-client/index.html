@@ -72,8 +72,20 @@
         }
         .btn-deposit:hover { background-color: #0b4ec2; }
 
+        /* --- PHẦN CHAT FIXED --- */
+        .chat-fixed { position: fixed; bottom: 20px; right: 20px; width: 350px; height: 450px; background: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); display: none; flex-direction: column; z-index: 1000; overflow: hidden; }
+        .chat-header { background: #1464F4; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .chat-messages { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #f8fafc; }
+        .msg { padding: 8px 12px; border-radius: 12px; font-size: 14px; max-width: 80%; }
+        .msg-admin { align-self: flex-start; background: #e2e8f0; color: #1e293b; }
+        .msg-customer { align-self: flex-end; background: #1464F4; color: white; }
+
         footer { background-color: #333; color: white; text-align: center; padding: 20px; font-size: 0.9em; margin-top: 40px; }
+        
+        /* Thêm favicon trống để xóa lỗi 404 */
+        link[rel="icon"] { display: none; }
     </style>
+    <link rel="icon" href="data:,">
 </head>
 <body>
     <header>
@@ -105,7 +117,20 @@
         <div id="car-list" class="car-list-grid">
             <p>Đang tải danh sách xe...</p>
         </div>
-    </main>
+        
+        </main>
+
+    <div id="chatWrapper" class="chat-fixed">
+        <div class="chat-header">
+            <span class="font-bold">💬 Chat với: <span id="chatWithUser">Hỗ trợ VinFast</span></span>
+            <button onclick="closeChat()" style="background:none; border:none; color:white; font-size:24px; cursor:pointer;">&times;</button>
+        </div>
+        <div id="chatMessages" class="chat-messages"></div>
+        <div style="padding: 10px; border-top: 1px solid #eee; display: flex; gap: 8px;">
+            <input type="text" id="chatInput" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px;" placeholder="Nhập nội dung...">
+            <button onclick="sendChatMessage()" style="background: #1464F4; color: white; border: none; padding: 0 20px; border-radius: 6px; cursor: pointer; font-weight: bold;">Gửi</button>
+        </div>
+    </div>
 
     <footer>
         <p>&copy; 2025 VinFast SOA Project. Hệ thống bán xe trực tuyến.</p>
@@ -122,7 +147,6 @@
             carListDiv.innerHTML = '<p>Đang kết nối tới Catalog Service...</p>';
             
             try {
-                // Sử dụng BASE_GATEWAY_URL khai báo từ script.js
                 const response = await fetch(`${BASE_GATEWAY_URL}/catalog/catalog/cars`); 
                 if (!response.ok) {
                     carListDiv.innerHTML = `<p style="color:red">Lỗi tải dữ liệu. Vui lòng kiểm tra Server.</p>`;
@@ -130,7 +154,6 @@
                 }
                 allCars = await response.json(); 
                 displayCars(allCars); 
-
             } catch (error) {
                 console.error(error);
                 carListDiv.innerHTML = `<p style="color:red">Không thể kết nối tới Gateway. Hãy đảm bảo Docker đang chạy.</p>`;
@@ -182,7 +205,8 @@
 
         // Khởi chạy khi trang tải xong
         document.addEventListener('DOMContentLoaded', () => {
-            loadCarList();
+            updateHeaderUI(); // Cập nhật trạng thái Đăng nhập/Hồ sơ trên Header
+            loadCarList();    // Tải danh sách xe
         });
     </script>
 </body>

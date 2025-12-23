@@ -29,6 +29,7 @@
         .status-tag { padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 0.85em; }
         .Paid { background: #e3f2fd; color: #1976d2; }
         .Scheduled { background: #e8f5e9; color: #2e7d32; }
+        .Pending { background: #fff3cd; color: #856404; }
 
         /* Chatbox Style */
         .chat-fixed { position: fixed; bottom: 20px; right: 20px; width: 350px; height: 450px; background: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); display: none; flex-direction: column; z-index: 1000; }
@@ -101,39 +102,66 @@
     <script>
         // Tự động load dữ liệu khi vào trang
         document.addEventListener('DOMContentLoaded', () => {
-            loadProfile();    // Hàm từ code cũ của bạn
-            loadUserOrders(); // Hàm mới để lấy danh sách đơn hàng
+            // Kiểm tra hàm loadProfile có trong script.js không, nếu không có hàm này sẽ gây lỗi đỏ
+            if (typeof loadProfile === 'function') {
+                loadProfile();
+            }
+            loadCustomerOrders(); // Gọi hàm lấy danh sách đơn hàng
         });
 
-        async function loadUserOrders() {
-            const userId = localStorage.getItem('user_id');
+        async function loadCustomerOrders() {
             const tbody = document.getElementById('user-orders-body');
             
             try {
-                // Gọi qua Gateway tới Order Service
-                const response = await fetch(`${BASE_GATEWAY_URL}/orders/user/${userId}`, {
+                // SỬA: Thêm backtick và gọi đúng API Gateway
+                const response = await fetch(`${BASE_GATEWAY_URL}/orders/api/v1/orders`, {
                     headers: getAuthHeader()
                 });
+                
+                if (!response.ok) throw new Error("Không thể kết nối API");
                 const orders = await response.json();
                 
                 tbody.innerHTML = '';
-                orders.forEach(order => {
-                    // Chỉ hiện nút Chat nếu đã thanh toán hoặc đã hẹn lịch
-                    const showChatBtn = (order.status === 'Paid' || order.status === 'Scheduled');
+                
+                if (orders.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center">Bạn chưa có đơn hàng nào.</td></tr>';
+                    return;
+                }
+
+                // Sử dụng Promise.all để lấy tên xe thực tế cho từng đơn hàng
+                const rows = await Promise.all(orders.map(async (order) => {
+                    let carName = "Xe VinFast";
+                    try {
+                        // Lấy car_id từ item đầu tiên trong đơn hàng để tìm tên xe
+                        if (order.items && order.items.length > 0) {
+                            const carId = order.items[0].car_model_id;
+                            const catRes = await fetch(`${BASE_GATEWAY_URL}/catalog/catalog/cars/${carId}`);
+                            if (catRes.ok) {
+                                const carData = await catRes.json();
+                                carName = carData.model_name;
+                            }
+                        }
+                    } catch (e) { console.warn("Lỗi lấy tên xe"); }
+
+                    const canChat = ['Paid', 'Scheduled', 'Confirmed'].includes(order.status);
                     
-                    tbody.innerHTML += `
+                    return `
                         <tr>
                             <td>#${order.id}</td>
-                            <td><strong>${order.car_model || 'VinFast Car'}</strong></td>
+                            <td><strong>${carName}</strong></td>
                             <td><span class="status-tag ${order.status}">${order.status}</span></td>
                             <td>
-                                ${showChatBtn ? `<button class="btn-chat" onclick="openChat(${order.id}, 'Hệ thống VinFast')">💬 Nhắn tin</button>` : '---'}
+                                ${canChat ? `<button class="btn-chat" onclick="openChat('${order.id}', 'Hệ thống VinFast')">💬 Nhắn tin</button>` : '---'}
                             </td>
                         </tr>
                     `;
-                });
+                }));
+
+                tbody.innerHTML = rows.join('');
+
             } catch (e) {
-                tbody.innerHTML = '<tr><td colspan="4">Không có dữ liệu đơn hàng.</td></tr>';
+                console.error("Lỗi:", e);
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:red">⚠️ Lỗi kết nối dịch vụ đơn hàng.</td></tr>';
             }
         }
     </script>
