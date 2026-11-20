@@ -19,7 +19,7 @@ concurrency:
 jobs:
   test-40:
     name: Docker, Chromium, API and Socket.IO
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 55
     env:
       PROJECT_DIR: VinFast-SOA-Project-master
