@@ -1,13 +1,11 @@
-name: VinFast SOA - SQA integration evidence
+name: VinFast SOA - SQA 40-case evidence
 
-# Run automatically for this isolated testing PR; after merge, allow manual reruns.
-# No push trigger; the project application and main branch remain untouched.
 on:
   pull_request:
     branches: [main]
     paths:
-      - '.github/workflows/vinfast-sqa.yml'
       - '.github/qa/**'
+      - '.github/workflows/vinfast-sqa.yml'
       - 'VinFast-SOA-Project-master/**'
   workflow_dispatch:
 
@@ -19,92 +17,96 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  verify:
-    name: Docker Compose and API integration checks
+  test-40:
+    name: Docker, Chromium, API and Socket.IO
     runs-on: ubuntu-latest
-    timeout-minutes: 35
-    defaults:
-      run:
-        shell: bash
+    timeout-minutes: 55
     env:
       PROJECT_DIR: VinFast-SOA-Project-master
       EVIDENCE_DIR: ${{ github.workspace }}/qa-evidence
     steps:
-      - name: Checkout the exact version under test
+      - name: Checkout exact revision
         uses: actions/checkout@v4
 
-      - name: Prepare isolated, clean SQLite data
+      - name: Set up Python for QA harness
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install browser and Socket.IO test dependencies
+        run: |
+          python -m pip install --disable-pip-version-check "playwright==1.56.0" "python-socketio[client]==5.14.3" "websocket-client>=1.8,<2"
+          python -m playwright install --with-deps chromium
+          python -m py_compile .github/qa/run_integration.py .github/qa/run_full_suite.py
+
+      - name: Prepare isolated SQLite fixture and baseline record
         run: |
           mkdir -p "$EVIDENCE_DIR"
-          printf 'commit=%s\nrun_id=%s\nrun_attempt=%s\n' \
-            "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+          printf 'repository=%s\ncommit=%s\nrun_id=%s\nrun_attempt=%s\n' \
+            "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
             > "$EVIDENCE_DIR/baseline.txt"
-          # These are only checked-out COPIES of the database files on the hosted runner.
+          # Only remove DB files in this transient runner checkout.
           find "$PROJECT_DIR" -type f -name '*.db' -delete
           docker version > "$EVIDENCE_DIR/docker_version.txt" 2>&1
           docker compose version >> "$EVIDENCE_DIR/docker_version.txt" 2>&1
           docker compose -f "$PROJECT_DIR/docker-compose.yml" config --quiet
 
-      - name: Build and start six services
+      - name: Start six Docker Compose services
         working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          docker compose up --build -d
+        run: docker compose up --build -d
 
-      - name: Wait until Catalog and User endpoints respond
+      - name: Wait for Catalog and User via Gateway
         run: |
-          python3 - <<'PY'
-          import json, time, urllib.request, urllib.error, sys
-          catalog = 'http://127.0.0.1:8000/catalog/catalog/cars'
-          user = 'http://127.0.0.1:8000/users/users/login'
+          python - <<'PY'
+          import json,sys,time,urllib.request,urllib.error
           for attempt in range(90):
               try:
-                  with urllib.request.urlopen(catalog, timeout=3) as r:
-                      if r.status != 200 or not isinstance(json.loads(r.read()), list):
-                          raise ValueError('Catalog response is not an array')
-                  req = urllib.request.Request(user, data=b'{"email":"probe.invalid@example.test","password":"invalid"}', headers={'Content-Type':'application/json'}, method='POST')
+                  with urllib.request.urlopen('http://127.0.0.1:8000/catalog/catalog/cars', timeout=4) as f:
+                      assert f.status==200 and len(json.load(f))>0
+                  payload=b'{"email":"qa-invalid@example.test","password":"invalid"}'
+                  req=urllib.request.Request('http://127.0.0.1:8000/users/users/login',method='POST',data=payload,headers={'Content-Type':'application/json'})
                   try:
-                      urllib.request.urlopen(req, timeout=3)
+                      urllib.request.urlopen(req,timeout=4)
                   except urllib.error.HTTPError as e:
-                      if e.code != 401:
-                          raise
-                  print('Both endpoints are responding')
+                      assert e.code==401
+                  print('Catalog and User endpoints ready')
                   sys.exit(0)
-              except Exception:
-                  time.sleep(3)
-          print('Timed out waiting for endpoints', file=sys.stderr)
-          sys.exit(1)
+              except Exception:time.sleep(3)
+          sys.exit('HTTP service readiness timed out')
           PY
 
-      - name: Run API checks on temporary CI data
+      - name: Execute 40-case test suite (retain real Fail/Blocked)
         run: |
-          python3 .github/qa/run_integration.py \
+          python -u .github/qa/run_full_suite.py \
             --base-url http://127.0.0.1:8000 \
+            --project-dir "$PROJECT_DIR" \
             --output "$EVIDENCE_DIR"
 
-      - name: Capture service logs and environment evidence
+      - name: Collect sanitized Compose logs
         if: always()
-        working-directory: ${{ env.PROJECT_DIR }}
         run: |
           mkdir -p "$EVIDENCE_DIR"
-          docker compose ps -a > "$EVIDENCE_DIR/compose_ps.txt" 2>&1 || true
-          # Exclude demo credentials and avoid persisting JWT tokens.
-          docker compose logs --no-color --timestamps 2>&1 |
-            sed -E 's@(admin@vinfast\.com)[[:space:]]*/[[:space:]]*[^[:space:]]+@\1 / [REDACTED]@g' \
-            > "$EVIDENCE_DIR/compose_logs.txt" || true
-          printf 'Repository: %s\nSHA: %s\nWorkflow: %s\n' \
-            "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$GITHUB_WORKFLOW" \
-            > "$EVIDENCE_DIR/build_metadata.txt"
+          docker compose -f "$PROJECT_DIR/docker-compose.yml" ps -a > "$EVIDENCE_DIR/compose_ps.txt" 2>&1 || true
+          docker compose -f "$PROJECT_DIR/docker-compose.yml" logs --no-color --timestamps > /tmp/vinfast-qa-compose.log 2>&1 || true
+          python - <<'PY'
+          import os,re
+          from pathlib import Path
+          s=Path('/tmp/vinfast-qa-compose.log').read_text(encoding='utf-8',errors='replace')
+          s=s.replace('admin123','[DEMO_PASSWORD_REDACTED]').replace('vinfast_secret_key_mac_dinh_123','[SECRET_REDACTED]')
+          s=re.sub(r'Bearer\s+[A-Za-z0-9._-]+','Bearer [REDACTED]',s)
+          Path(os.environ['EVIDENCE_DIR'],'compose_logs.txt').write_text(s,encoding='utf-8')
+          PY
 
-      - name: Upload evidence even if tests fail
+      - name: Publish QA evidence even when application test fails
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vinfast-sqa-evidence-${{ github.run_id }}
+          name: vinfast-sqa-40tc-${{ github.run_id }}
           path: qa-evidence/
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Stop temporary services
+      - name: Remove transient test containers
         if: always()
         working-directory: ${{ env.PROJECT_DIR }}
         run: docker compose down --remove-orphans || true
