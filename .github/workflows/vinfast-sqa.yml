@@ -1,0 +1,112 @@
+name: VinFast SOA - SQA 40-case evidence
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/qa/**'
+      - '.github/workflows/vinfast-sqa.yml'
+      - 'VinFast-SOA-Project-master/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vinfast-sqa-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test-40:
+    name: Docker, Chromium, API and Socket.IO
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      PROJECT_DIR: VinFast-SOA-Project-master
+      EVIDENCE_DIR: ${{ github.workspace }}/qa-evidence
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@v4
+
+      - name: Set up Python for QA harness
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install browser and Socket.IO test dependencies
+        run: |
+          python -m pip install --disable-pip-version-check "playwright==1.56.0" "python-socketio[client]==5.14.3" "websocket-client>=1.8,<2"
+          python -m playwright install --with-deps chromium
+          python -m py_compile .github/qa/run_integration.py .github/qa/run_full_suite.py
+
+      - name: Prepare isolated SQLite fixture and baseline record
+        run: |
+          mkdir -p "$EVIDENCE_DIR"
+          printf 'repository=%s\ncommit=%s\nrun_id=%s\nrun_attempt=%s\n' \
+            "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$EVIDENCE_DIR/baseline.txt"
+          # Only remove DB files in this transient runner checkout.
+          find "$PROJECT_DIR" -type f -name '*.db' -delete
+          docker version > "$EVIDENCE_DIR/docker_version.txt" 2>&1
+          docker compose version >> "$EVIDENCE_DIR/docker_version.txt" 2>&1
+          docker compose -f "$PROJECT_DIR/docker-compose.yml" config --quiet
+
+      - name: Start six Docker Compose services
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: docker compose up --build -d
+
+      - name: Wait for Catalog and User via Gateway
+        run: |
+          python - <<'PY'
+          import json,sys,time,urllib.request,urllib.error
+          for attempt in range(90):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:8000/catalog/catalog/cars', timeout=4) as f:
+                      assert f.status==200 and len(json.load(f))>0
+                  payload=b'{"email":"qa-invalid@example.test","password":"invalid"}'
+                  req=urllib.request.Request('http://127.0.0.1:8000/users/users/login',method='POST',data=payload,headers={'Content-Type':'application/json'})
+                  try:
+                      urllib.request.urlopen(req,timeout=4)
+                  except urllib.error.HTTPError as e:
+                      assert e.code==401
+                  print('Catalog and User endpoints ready')
+                  sys.exit(0)
+              except Exception:time.sleep(3)
+          sys.exit('HTTP service readiness timed out')
+          PY
+
+      - name: Execute 40-case test suite (retain real Fail/Blocked)
+        run: |
+          python -u .github/qa/run_full_suite.py \
+            --base-url http://127.0.0.1:8000 \
+            --project-dir "$PROJECT_DIR" \
+            --output "$EVIDENCE_DIR"
+
+      - name: Collect sanitized Compose logs
+        if: always()
+        run: |
+          mkdir -p "$EVIDENCE_DIR"
+          docker compose -f "$PROJECT_DIR/docker-compose.yml" ps -a > "$EVIDENCE_DIR/compose_ps.txt" 2>&1 || true
+          docker compose -f "$PROJECT_DIR/docker-compose.yml" logs --no-color --timestamps > /tmp/vinfast-qa-compose.log 2>&1 || true
+          python - <<'PY'
+          import os,re
+          from pathlib import Path
+          s=Path('/tmp/vinfast-qa-compose.log').read_text(encoding='utf-8',errors='replace')
+          s=s.replace('admin123','[DEMO_PASSWORD_REDACTED]').replace('vinfast_secret_key_mac_dinh_123','[SECRET_REDACTED]')
+          s=re.sub(r'Bearer\s+[A-Za-z0-9._-]+','Bearer [REDACTED]',s)
+          Path(os.environ['EVIDENCE_DIR'],'compose_logs.txt').write_text(s,encoding='utf-8')
+          PY
+
+      - name: Publish QA evidence even when application test fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vinfast-sqa-40tc-${{ github.run_id }}
+          path: qa-evidence/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Remove transient test containers
+        if: always()
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: docker compose down --remove-orphans || true
